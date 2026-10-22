@@ -1,0 +1,273 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finalizar pedido | Bake & Made</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Great+Vibes&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{% static 'tienda/premium.css' %}">
+    <link rel="stylesheet" href="{% static 'tienda/checkout-premium.css' %}">
+    <script src="{% static 'tienda/premium.js' %}" defer></script>
+</head>
+
+<body class="premium-site">
+
+    <div class="announcement">
+        <span>✦</span>
+        PEQUEÑOS DETALLES, GRANDES MOMENTOS
+        <span>✦</span>
+    </div>
+
+    <header class="premium-header">
+        <div class="header-inner">
+
+            <a class="brand" href="{% url 'inicio' %}">
+                Bake & Made
+                <small>ARTISAN PATISSERIE</small>
+            </a>
+
+            <button class="mobile-menu-toggle"
+                    type="button"
+                    aria-label="Abrir menú"
+                    aria-expanded="false"
+                    aria-controls="main-navigation">
+                ☰
+            </button>
+
+            <nav class="premium-nav" id="main-navigation">
+                <a href="{% url 'inicio' %}">Inicio</a>
+                <a href="{% url 'inicio' %}#productos">Colección</a>
+                <a href="{% url 'ver_carrito' %}" class="nav-cart">
+                    Mi carrito
+                    {% if contador_carrito > 0 %}
+                        <span class="cart-count">{{ contador_carrito }}</span>
+                    {% endif %}
+                </a>
+
+                {% if user.is_authenticated %}
+                    <span class="user-greeting">
+                        Hola, {{ user.first_name|default:user.username }}
+                    </span>
+                {% endif %}
+            </nav>
+
+        </div>
+    </header>
+
+    {% if messages %}
+        <div class="cart-messages" role="status">
+            {% for message in messages %}
+                <p>{{ message }}</p>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <main class="checkout-page">
+
+        <div class="checkout-heading reveal">
+            <span class="section-kicker">THE SWEETEST FINAL STEP</span>
+
+            <h1>
+                Tu momento dulce
+                <em>está por comenzar.</em>
+            </h1>
+
+            <p>
+                Solo necesitamos algunos detalles para preparar
+                tu pedido con todo el cariño que merece.
+            </p>
+        </div>
+
+        <div class="checkout-layout">
+
+            <section class="checkout-form-panel reveal">
+
+                <div class="checkout-panel-heading">
+                    <span>01 / INFORMACIÓN DE ENTREGA</span>
+                    <h2>¿A dónde llevamos tu felicidad?</h2>
+                    <p>
+                        Revisa tus datos y escribe la dirección
+                        donde deseas recibir tu pedido.
+                    </p>
+                </div>
+
+                <form method="POST"
+                    action="{% url 'checkout' %}"
+                    class="checkout-form"
+                    id="checkout-form">
+
+                    {% csrf_token %}
+
+                <input type="hidden"
+                    name="checkout_token"
+                    value="{{ checkout_token }}">
+
+                    <div class="checkout-field">
+                        <label>Cliente</label>
+                        <div class="checkout-readonly">
+                            {{ user.get_full_name|default:user.username }}
+                        </div>
+                    </div>
+
+                    <div class="checkout-field">
+                        <label>Correo electrónico</label>
+                        <div class="checkout-readonly">
+                            {{ user.email|default:"No registrado" }}
+                        </div>
+                    </div>
+
+                    <div class="checkout-field">
+                        <label for="direccion_entrega">
+                            Dirección de entrega <span>*</span>
+                        </label>
+
+                        <textarea
+                            id="direccion_entrega"
+                            name="direccion_entrega"
+                            rows="5"
+                            maxlength="1000"
+                            required
+                            placeholder="Calle, número exterior e interior, colonia, código postal, ciudad, estado y referencias de entrega."></textarea>
+
+                        <small>
+                            Incluye referencias que nos ayuden
+                            a identificar correctamente tu domicilio.
+                        </small>
+                    </div>
+
+                    <div class="checkout-info">
+                        ✦ Tu pedido se registrará como pendiente
+                        y será revisado antes de su preparación.
+                    </div>
+
+                    <button type="submit" class="checkout-submit">
+                        Confirmar mi pedido
+                        <span>↗</span>
+                    </button>
+
+                    <a href="{% url 'ver_carrito' %}" class="checkout-back">
+                        ← Volver a mi carrito
+                    </a>
+                </form>
+
+            </section>
+
+            <aside class="checkout-summary reveal">
+
+                <div class="checkout-summary-star">✦</div>
+
+                <span class="section-kicker">MADE JUST FOR YOU</span>
+                <h2>Tu dulce selección</h2>
+
+                <p class="checkout-summary-description">
+                    Cada pequeño detalle cuenta.
+                    Esta es la selección que hemos preparado para ti.
+                </p>
+
+                <div class="checkout-summary-divider"></div>
+
+                {% for item in productos_carrito %}
+                    <div class="checkout-product">
+
+                        <div class="checkout-product-image">
+                            {% if item.producto.imagen %}
+                                <img src="{{ item.producto.imagen.url }}"
+                                     alt="{{ item.producto.nombre_producto }}">
+                            {% else %}
+                                <span>✦</span>
+                            {% endif %}
+                        </div>
+
+                        <div class="checkout-product-info">
+                            <h3>{{ item.producto.nombre_producto }}</h3>
+                            <small>Cantidad: {{ item.cantidad }}</small>
+                        </div>
+
+                        <strong>${{ item.subtotal }}</strong>
+
+                    </div>
+                {% endfor %}
+
+                <div class="checkout-summary-divider"></div>
+
+                <div class="checkout-total-row">
+                    <span>Subtotal</span>
+                    <strong>${{ total }} MXN</strong>
+                </div>
+
+                <div class="checkout-total-row">
+                    <span>Entrega</span>
+                    <span>Por confirmar</span>
+                </div>
+
+                <div class="checkout-summary-divider"></div>
+
+                <div class="checkout-grand-total">
+                    <span>Total de productos</span>
+                    <strong>${{ total }} MXN</strong>
+                </div>
+
+                <p class="checkout-summary-note">
+                    El costo de entrega, si corresponde,
+                    se confirmará posteriormente.
+                    No se realizará ningún cobro en esta página.
+                </p>
+
+                <div class="checkout-summary-footer">
+                    ✦ HECHO CON AMOR, PENSADO PARA TI ✦
+                </div>
+
+            </aside>
+
+        </div>
+
+    </main>
+
+    <footer class="premium-footer">
+        <div class="footer-main">
+            <div>
+                <h2>Bake & Made</h2>
+                <p>Creaciones dulces para historias inolvidables.</p>
+            </div>
+
+            <div class="footer-links">
+                <a href="{% url 'inicio' %}">Inicio</a>
+                <a href="{% url 'inicio' %}#productos">Colección</a>
+                <a href="{% url 'ver_carrito' %}">Carrito</a>
+            </div>
+        </div>
+
+        <div class="footer-bottom">
+            <span>© 2026 Bake & Made</span>
+            <span>MADE WITH LOVE ✦</span>
+        </div>
+    </footer>
+
+    <script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const formulario = document.getElementById("checkout-form");
+
+        if (!formulario) return;
+
+        formulario.addEventListener("submit", function () {
+            if (!formulario.checkValidity()) return;
+
+            const boton = formulario.querySelector(".checkout-submit");
+
+            if (boton) {
+                boton.disabled = true;
+                boton.innerHTML = "Registrando tu pedido...";
+                boton.style.opacity = "0.7";
+                boton.style.cursor = "wait";
+            }
+        });
+    });
+</script>
+
+</body>
+</html>

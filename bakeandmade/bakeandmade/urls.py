@@ -1,22 +1,54 @@
-"""
-URL configuration for bakeandmade project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.1/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
+from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib import admin
 from django.urls import path
+from django.conf import settings
+from django.conf.urls.static import static
+from tienda import views
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('', views.inicio, name='inicio'),
+    path('registro/', views.registro, name='registro'),
+    
+    path(
+    'login/',
+    LoginView.as_view(template_name='tienda/login.html'),
+    name='login'
+    ),
+
+    path(
+        'carrito/agregar/<int:producto_id>/',
+        views.agregar_carrito,
+        name='agregar_carrito'
+    ),
+    
+    path('logout/', LogoutView.as_view(next_page='inicio'), name='logout'),
+    
+    path(
+    'carrito/',
+    views.ver_carrito,
+    name='ver_carrito'
+    ),
+
+    path('checkout/', views.checkout, name='checkout'),
+
+    path(
+    'carrito/actualizar/<int:producto_id>/',
+    views.actualizar_carrito,
+    name='actualizar_carrito'
+    ),
+
+    path('pedido-confirmado/<int:pedido_id>/', views.pedido_confirmado, name='pedido_confirmado'),
+
+    
 ]
+
+
+# Mostrar imágenes durante el desarrollo
+if settings.DEBUG:
+    urlpatterns += static(
+        settings.MEDIA_URL,
+        document_root=settings.MEDIA_ROOT
+    )
+
