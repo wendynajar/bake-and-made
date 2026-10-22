@@ -1,0 +1,99 @@
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iniciar sesión | Bake & Made</title>
+    <link rel="stylesheet" href="{% static 'tienda/estilos.css' %}">
+    <style>
+        .login-contenedor {
+            max-width: 480px;
+            margin: 70px auto;
+            padding: 40px;
+            background: white;
+            border-radius: 18px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+        }
+
+        .login-contenedor h2 {
+            text-align: center;
+            color: #854c58;
+        }
+
+        .login-contenedor p {
+            text-align: center;
+        }
+
+        .login-contenedor label {
+            display: block;
+            margin-top: 20px;
+            margin-bottom: 8px;
+            color: #854c58;
+            font-weight: bold;
+        }
+
+        .login-contenedor input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #e3bfc5;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+
+        .login-contenedor button {
+            width: 100%;
+            margin-top: 25px;
+            padding: 13px;
+            background: #c17e90;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .login-contenedor button:hover {
+            background: #a96377;
+        }
+
+        .login-contenedor a {
+            color: #854c58;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="login-contenedor">
+        <h2>Bienvenido a Bake & Made</h2>
+        <p>Inicia sesión para disfrutar de nuestros postres.</p>
+
+        {% if messages %}
+            {% for message in messages %}
+                <p>{{ message }}</p>
+            {% endfor %}
+        {% endif %}
+
+        <form method="POST">
+            {% csrf_token %}
+
+            <label for="username">Nombre de usuario</label>
+            <input type="text" id="username" name="username"
+                   autocomplete="username" required>
+
+            <label for="password">Contraseña</label>
+            <input type="password" id="password" name="password"
+                   autocomplete="current-password" required>
+
+            <button type="submit">Iniciar sesión</button>
+        </form>
+
+        <p>¿Todavía no tienes una cuenta?</p>
+        <p><a href="{% url 'registro' %}">Regístrate aquí</a></p>
+
+        <p><a href="{% url 'inicio' %}">Volver a la tienda</a></p>
+    </div>
+
+</body>
+</html>

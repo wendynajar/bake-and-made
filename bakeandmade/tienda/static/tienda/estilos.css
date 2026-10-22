@@ -1,0 +1,222 @@
+
+/* Diseño general de Bake & Made */
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background-color: #fffaf7;
+    color: #49352f;
+}
+
+/* Encabezado */
+
+header {
+    background-color: #f5d9d9;
+    text-align: center;
+    padding: 35px 20px;
+}
+
+header h1 {
+    font-size: 38px;
+    margin: 0;
+    color: #804c55;
+}
+
+header p {
+    margin-bottom: 0;
+}
+
+/* Navegación */
+
+nav {
+    background-color: #ffffff;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 30px;
+    padding: 18px;
+    box-shadow: 0 2px 8px #00000012;
+}
+
+nav a {
+    color: #804c55;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+nav a:hover {
+    color: #c47b8c;
+}
+
+/* Contenido */
+
+main {
+    max-width: 1200px;
+    margin: auto;
+    padding: 30px 20px;
+}
+
+section {
+    margin-bottom: 55px;
+}
+
+section h2 {
+    color: #804c55;
+    text-align: center;
+    font-size: 28px;
+}
+
+/* Catálogo */
+
+
+.catalogo {
+    display: grid;
+    grid-template-columns: repeat(
+        auto-fill,
+        minmax(250px, 280px)
+    );
+    justify-content: center;
+    gap: 25px;
+    margin-top: 30px;
+}
+
+
+.producto {
+    background-color: white;
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 4px 15px #00000012;
+    text-align: center;
+}
+
+.producto img {
+    width: 100%;
+    height: 250px;
+    object-fit: cover;
+    border-radius: 12px;
+}
+
+.producto h3 {
+    color: #804c55;
+    font-size: 21px;
+}
+
+.producto p {
+    line-height: 1.6;
+}
+
+/* Botones */
+
+button {
+    background-color: #c47b8c;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+    background-color: #a95f72;
+}
+
+button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* Pie de página */
+
+footer {
+    background-color: #f5d9d9;
+    text-align: center;
+    padding: 25px;
+}
+
+/* Adaptación a celulares */
+
+@media (max-width: 600px) {
+    header h1 {
+        font-size: 30px;
+    }
+
+    nav {
+        gap: 15px;
+    }
+
+    main {
+        padding: 20px 15px;
+    }
+
+    .catalogo {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* Formulario de registro */
+
+.registro-contenedor {
+    max-width: 500px;
+    margin: 30px auto;
+    padding: 35px;
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 4px 15px #00000012;
+}
+
+.registro-contenedor > p {
+    text-align: center;
+    line-height: 1.6;
+}
+
+.registro-formulario {
+    margin-top: 25px;
+}
+
+.campo-formulario {
+    margin-bottom: 20px;
+}
+
+.campo-formulario label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #804c55;
+}
+
+.campo-formulario input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #d9bfc3;
+    border-radius: 8px;
+    font-size: 15px;
+}
+
+.campo-formulario input:focus {
+    outline: 2px solid #c47b8c;
+    outline-offset: 1px;
+}
+
+.campo-formulario small {
+    display: block;
+    margin-top: 6px;
+    color: #666;
+    line-height: 1.5;
+}
+
+.registro-formulario button {
+    width: 100%;
+}
+
+.error, .errores {
+    color: #b42318;
+    font-size: 14px;
+    margin-top: 6px;
+}
+

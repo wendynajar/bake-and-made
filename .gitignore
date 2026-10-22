@@ -363,3 +363,18 @@ staticfiles/
 
 # macOS
 .DS_Store
+
+# Base de datos local
+db.sqlite3
+*.sqlite3
+
+# Variables de entorno y credenciales
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

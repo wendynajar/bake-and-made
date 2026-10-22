@@ -47,12 +47,37 @@ class Ingrediente(models.Model):
         return self.nombre
 
 
+
 class Menu(models.Model):
     nombre_producto = models.CharField(max_length=100)
     descripcion = models.TextField()
-    precio_base = models.DecimalField(max_digits=10, decimal_places=2)
+    precio_base = models.DecimalField(
+        max_digits=10,
+        decimal_places=2
+    )
     disponible = models.BooleanField(default=True)
-    ingredientes = models.ManyToManyField(Ingrediente, through='DetallesMenu')
+
+    ingredientes = models.ManyToManyField(
+        Ingrediente,
+        through='DetallesMenu'
+    )
+
+    # Nuevos campos para comercio electrónico
+    categoria = models.ForeignKey(
+        'CategoriaProducto',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='productos'
+    )
+
+    imagen = models.ImageField(
+        upload_to='productos/',
+        blank=True,
+        null=True
+    )
+
+    stock = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return self.nombre_producto
@@ -95,6 +120,13 @@ class Pedido(models.Model):
     total = models.DecimalField(max_digits=10, decimal_places=2)
     direccion_entrega = models.TextField()
 
+    checkout_token = models.UUIDField(
+        unique=True,
+        null=True,
+        blank=True,
+        editable=False
+    )
+
     def __str__(self):
         return f"Pedido #{self.id} - {self.usuario.username}"
 
@@ -116,3 +148,17 @@ class ExperienciaQR(models.Model):
 
     def __str__(self):
         return f"QR {self.codigo_unico}"
+
+    
+# --- 5. Categorías de productos ---
+
+class CategoriaProducto(models.Model):
+    nombre = models.CharField(max_length=100, unique=True)
+    descripcion = models.TextField(blank=True)
+
+    def __str__(self):
+        return self.nombre
+
+    class Meta:
+        verbose_name = "Categoría de producto"
+        verbose_name_plural = "Categorías de productos"

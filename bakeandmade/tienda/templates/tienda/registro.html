@@ -1,0 +1,75 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+    <title>Registro | Bake & Made</title>
+    <link rel="stylesheet"
+          href="{% static 'tienda/estilos.css' %}">
+</head>
+<body>
+
+<header>
+    <h1>Bake & Made</h1>
+    <p>Endulzamos tus momentos especiales</p>
+</header>
+
+<nav>
+    <a href="{% url 'inicio' %}">Inicio</a>
+    <a href="{% url 'inicio' %}#productos">Productos</a>
+    <a href="{% url 'registro' %}">Registrarse</a>
+</nav>
+
+<main>
+    <section class="registro-contenedor">
+        <h2>Crea tu cuenta</h2>
+        <p>Regístrate para comenzar a comprar
+           tus postres favoritos.</p>
+
+        <form method="POST" class="registro-formulario">
+            {% csrf_token %}
+
+            {% if formulario.non_field_errors %}
+                <div class="errores">
+                    {{ formulario.non_field_errors }}
+                </div>
+            {% endif %}
+
+            {% for campo in formulario %}
+                <div class="campo-formulario">
+                    <label for="{{ campo.id_for_label }}">
+                        {{ campo.label }}
+                    </label>
+
+                    {{ campo }}
+
+                    {% if campo.help_text %}
+                        <small>{{ campo.help_text }}</small>
+                    {% endif %}
+
+                    {% for error in campo.errors %}
+                        <p class="error">{{ error }}</p>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+
+            <button type="submit">
+                Crear cuenta
+            </button>
+        </form>
+
+        <p>
+            ¿Ya tienes una cuenta?
+            Próximamente podrás iniciar sesión aquí.
+        </p>
+    </section>
+</main>
+
+<footer>
+    <p>© 2026 Bake & Made. Todos los derechos reservados.</p>
+</footer>
+
+</body>
+</html>

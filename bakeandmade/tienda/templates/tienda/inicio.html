@@ -1,0 +1,400 @@
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#fff9f6">
+    <meta name="description" content="Bake & Made: cupcakes artesanales, detalles personalizados y momentos extraordinarios.">
+
+    <title>Bake & Made | The Art of Sweet Moments</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Great+Vibes&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{% static 'tienda/estilos.css' %}">
+    <link rel="stylesheet" href="{% static 'tienda/premium.css' %}">
+    <script src="{% static 'tienda/premium.js' %}" defer></script>
+</head>
+
+<body class="premium-site">
+
+    <div class="announcement">
+        <span>✦</span>
+        Pequeños detalles, grandes momentos
+        <span>✦</span>
+    </div>
+
+    <header class="premium-header" id="top">
+        <div class="header-inner">
+
+            <a class="brand" href="{% url 'inicio' %}">
+                Bake <span>&</span> Made
+                <small>ARTISAN PATISSERIE</small>
+            </a>
+
+            <button class="mobile-menu-toggle"
+                    type="button"
+                    aria-label="Abrir menú"
+                    aria-expanded="false"
+                    aria-controls="main-navigation">
+                ☰
+            </button>
+
+            <nav class="premium-nav" id="main-navigation" aria-label="Navegación principal">
+                <a href="#productos">Colección</a>
+                <a href="#experiencia">Experiencia</a>
+                <a href="#nosotros">Nuestra historia</a>
+                
+                <a href="{% url 'ver_carrito' %}" class="nav-cart">
+                    Carrito
+
+                    {% if contador_carrito > 0 %}
+                        <span class="cart-count">{{ contador_carrito }}</span>
+                    {% endif %}
+
+                    <span aria-hidden="true">↗</span>
+                </a>
+
+
+                {% if user.is_authenticated %}
+                    <span class="user-greeting">
+                        Hola, {{ user.first_name|default:user.username }}
+                    </span>
+                    <form method="POST" action="{% url 'logout' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="nav-account">
+                            Salir
+                        </button>
+                    </form>
+                {% else %}
+                    <a class="nav-account" href="{% url 'login' %}">
+                        Mi cuenta
+                    </a>
+                {% endif %}
+            </nav>
+
+        </div>
+    </header>
+
+    {% if messages %}
+        <div class="cart-messages" role="status">
+            {% for message in messages %}
+                <p>{{ message }}</p>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <main>
+
+        <!-- HERO -->
+        <section class="premium-hero">
+
+            <div class="hero-content reveal">
+                <div class="eyebrow">
+                    <span class="eyebrow-line"></span>
+                    HECHO CON AMOR Y ARTE
+                </div>
+
+                <h1>
+                    La vida es
+                    <em>más dulce</em>
+                    cuando se comparte.
+                </h1>
+
+                <p class="hero-description">
+                    Repostería artesanal creada para transformar
+                    instantes cotidianos en recuerdos inolvidables.
+                    Cada detalle, una pequeña obra de arte.
+                </p>
+
+                <div class="hero-actions">
+                    <a class="premium-btn" href="#productos">
+                        Descubrir colección <span>↗</span>
+                    </a>
+
+                    <a class="text-link" href="#nosotros">
+                        Conoce nuestra historia
+                    </a>
+                </div>
+
+                <div class="hero-signature">
+                    <span>Handcrafted with love</span>
+                    <span class="signature-star">✳</span>
+                    <span>San Luis Potosí</span>
+                </div>
+            </div>
+
+            <div class="hero-visual">
+                <div class="hero-circle"></div>
+                <div class="hero-orbit hero-orbit-one"></div>
+                <div class="hero-orbit hero-orbit-two"></div>
+
+                {% for producto in productos %}
+                    {% if forloop.first and producto.imagen %}
+                        <img class="hero-product"
+                             src="{{ producto.imagen.url }}"
+                             alt="{{ producto.nombre_producto }}"
+                             fetchpriority="high">
+                    {% endif %}
+                {% endfor %}
+
+                <div class="floating-label">
+                    <span class="floating-star">✦</span>
+                    <div>
+                        <strong>Sweet moments</strong>
+                        <small>Made just for you</small>
+                    </div>
+                </div>
+
+                <span class="hero-decoration deco-one">✳</span>
+                <span class="hero-decoration deco-two">✦</span>
+                <span class="hero-decoration deco-three">✧</span>
+            </div>
+
+            <a href="#productos" class="scroll-indicator">
+                DESLIZA PARA DESCUBRIR
+                <span>↓</span>
+            </a>
+        </section>
+
+        <!-- MARQUEE -->
+        <div class="luxury-marquee" aria-label="Nuestra filosofía">
+            <div class="marquee-track" aria-hidden="true">
+                {% for _ in "1234" %}
+                <span>BAKED WITH LOVE</span>
+                <i>✦</i>
+                <span>MADE FOR MEMORIES</span>
+                <i>✦</i>
+                <span>THE SWEETEST DETAILS</span>
+                <i>✦</i>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- COLECCIÓN -->
+        <section id="productos" class="premium-products">
+            <div class="section-heading reveal">
+                <span class="section-kicker">01 / NUESTRA SELECCIÓN</span>
+
+                <h2>
+                    Dulces creaciones,
+                    <em>momentos únicos.</em>
+                </h2>
+
+                <p>
+                    Descubre sabores elaborados con dedicación,
+                    creatividad y un toque especial.
+                </p>
+            </div>
+
+            <div class="premium-catalog">
+
+                {% for producto in productos %}
+                    <article class="premium-product-card reveal">
+
+                        <div class="product-image-wrap">
+                            {% if producto.imagen %}
+                                <img src="{{ producto.imagen.url }}"
+                                     alt="{{ producto.nombre_producto }}"
+                                     loading="lazy">
+                            {% else %}
+                                <div class="product-no-image">
+                                    Bake & Made
+                                </div>
+                            {% endif %}
+
+                            <span class="product-badge">
+                                ARTESANAL
+                            </span>
+
+                            <form class="quick-add"
+                                  method="POST"
+                                  action="{% url 'agregar_carrito' producto.id %}">
+                                {% csrf_token %}
+                                <button type="submit"
+                                        aria-label="Agregar {{ producto.nombre_producto }} al carrito">
+                                    +
+                                </button>
+                            </form>
+                        </div>
+
+                        <div class="product-info">
+                            <span class="product-category">
+                                {{ producto.categoria.nombre|default:"Nuestra colección" }}
+                            </span>
+
+                            <h3>{{ producto.nombre_producto }}</h3>
+
+                            <p>{{ producto.descripcion }}</p>
+
+                            <div class="product-bottom">
+                                <strong>${{ producto.precio_base }} MXN</strong>
+
+                                <form method="POST"
+                                      action="{% url 'agregar_carrito' producto.id %}">
+                                    {% csrf_token %}
+                                    <button type="submit">
+                                        Añadir <span>↗</span>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </article>
+
+                {% empty %}
+                    <p class="empty-products">
+                        Estamos preparando nuevas delicias.
+                        Vuelve pronto.
+                    </p>
+                {% endfor %}
+
+            </div>
+        </section>
+
+        <!-- EXPERIENCIA -->
+        <section id="experiencia" class="experience-section">
+
+            <div class="experience-decoration">✳</div>
+
+            <div class="experience-inner reveal">
+                <span class="section-kicker">
+                    02 / HECHO PARA TI
+                </span>
+
+                <h2>
+                    Tu imaginación.
+                    <em>Nuestra inspiración.</em>
+                </h2>
+
+                <p>
+                    Un sabor especial, una celebración inolvidable,
+                    una historia que merece ser contada.
+                    En Bake & Made creemos que cada creación
+                    debe ser tan única como la persona que la recibe.
+                </p>
+
+                <a href="#nosotros" class="premium-btn premium-btn-light">
+                    Descubre nuestra esencia <span>↗</span>
+                </a>
+            </div>
+        </section>
+
+        <!-- HISTORIA -->
+        <section id="nosotros" class="story-section">
+
+            <div class="story-art reveal">
+                {% for producto in productos %}
+                    {% if forloop.first and producto.imagen %}
+                        <img src="{{ producto.imagen.url }}"
+                             alt="Repostería artesanal Bake & Made"
+                             loading="lazy">
+                    {% endif %}
+                {% endfor %}
+
+                <div class="story-stamp">
+                    <span>BAKE & MADE</span>
+                    <strong>✦</strong>
+                    <span>MADE WITH LOVE</span>
+                </div>
+            </div>
+
+            <div class="story-copy reveal">
+                <span class="section-kicker">
+                    03 / NUESTRA HISTORIA
+                </span>
+
+                <h2>
+                    Una historia que
+                    comenzó con
+                    <em>un sueño dulce.</em>
+                </h2>
+
+                <p>
+                    Bake & Made nació de la amistad, la creatividad
+                    y las ganas de construir algo diferente.
+                    Un proyecto donde la pasión por la repostería
+                    se encuentra con la innovación.
+                </p>
+
+                <p>
+                    Creemos en los detalles que emocionan,
+                    los sabores que se recuerdan y los regalos
+                    que cuentan historias.
+                </p>
+
+                <div class="story-quote">
+                    “Porque los mejores recuerdos siempre
+                    tienen un toque de dulzura.”
+                </div>
+            </div>
+
+        </section>
+
+        <!-- VALORES -->
+        <section class="values-section">
+            <div class="value-item reveal">
+                <span>✳</span>
+                <h3>Hecho con detalle</h3>
+                <p>Cada creación tiene su propia personalidad.</p>
+            </div>
+
+            <div class="value-item reveal">
+                <span>♡</span>
+                <h3>Momentos especiales</h3>
+                <p>Un detalle dulce para cada celebración.</p>
+            </div>
+
+            <div class="value-item reveal">
+                <span>✦</span>
+                <h3>Creatividad sin límites</h3>
+                <p>Ideas originales que se convierten en sabores.</p>
+            </div>
+        </section>
+
+        <!-- CIERRE -->
+        <section class="closing-section">
+            <span class="section-kicker">
+                YOUR SWEET STORY STARTS HERE
+            </span>
+
+            <h2>
+                Haz que cada día
+                <em>sepa extraordinario.</em>
+            </h2>
+
+            <a href="#productos" class="premium-btn">
+                Elegir mis favoritos <span>↗</span>
+            </a>
+        </section>
+
+    </main>
+
+    <footer class="premium-footer">
+        <div class="footer-main">
+            <div>
+                <h2>Bake & Made</h2>
+                <p>
+                    Creaciones dulces para historias inolvidables.
+                </p>
+            </div>
+
+            <div class="footer-links">
+                <a href="#productos">Colección</a>
+                <a href="#experiencia">Experiencia</a>
+                <a href="#nosotros">Nosotros</a>
+                <a href="{% url 'ver_carrito' %}">Carrito</a>
+            </div>
+        </div>
+
+        <div class="footer-bottom">
+            <span>© 2026 Bake & Made</span>
+            <span>MADE WITH LOVE ✦</span>
+        </div>
+    </footer>
+
+</body>
+</html>
+

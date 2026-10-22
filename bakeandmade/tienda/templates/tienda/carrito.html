@@ -1,0 +1,299 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Mi carrito | Bake & Made</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Great+Vibes&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{% static 'tienda/premium.css' %}">
+    <link rel="stylesheet" href="{% static 'tienda/carrito-premium.css' %}">
+
+    <script src="{% static 'tienda/premium.js' %}" defer></script>
+</head>
+
+<body class="premium-site">
+
+    <div class="announcement">
+        <span>✦</span>
+        PEQUEÑOS DETALLES, GRANDES MOMENTOS
+        <span>✦</span>
+    </div>
+
+    <header class="premium-header">
+        <div class="header-inner">
+
+            <a class="brand" href="{% url 'inicio' %}">
+                Bake & Made
+                <small>ARTISAN PATISSERIE</small>
+            </a>
+
+            <button class="mobile-menu-toggle"
+                    type="button"
+                    aria-label="Abrir menú"
+                    aria-expanded="false"
+                    aria-controls="main-navigation">
+                ☰
+            </button>
+
+            <nav class="premium-nav" id="main-navigation">
+                <a href="{% url 'inicio' %}">Inicio</a>
+                <a href="{% url 'inicio' %}#productos">Colección</a>
+                <a href="{% url 'inicio' %}#nosotros">Nuestra historia</a>
+                <a href="{% url 'ver_carrito' %}">Mi carrito</a>
+
+                {% if user.is_authenticated %}
+                    <span class="user-greeting">
+                        Hola, {{ user.first_name|default:user.username }}
+                    </span>
+                    <form method="POST" action="{% url 'logout' %}">
+                        {% csrf_token %}
+                        <button class="nav-account" type="submit">
+                            Salir
+                        </button>
+                    </form>
+                {% else %}
+                    <a class="nav-account" href="{% url 'login' %}">
+                        Mi cuenta
+                    </a>
+                {% endif %}
+            </nav>
+
+        </div>
+    </header>
+
+    <main class="cart-page">
+
+        <div class="cart-heading reveal">
+            <span class="section-kicker">
+                YOUR SWEET SELECTION
+            </span>
+
+            <h1>
+                Tu carrito,
+                <em>tus dulces momentos.</em>
+            </h1>
+
+            <p>
+                Estás a un paso de disfrutar algo extraordinario.
+                Revisa tus favoritos antes de continuar.
+            </p>
+        </div>
+
+        {% if messages %}
+            <div class="cart-messages">
+                {% for message in messages %}
+                    {% if forloop.last %}
+                        <p>{{ message }}</p>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if productos_carrito %}
+
+            <div class="cart-layout">
+
+                <!-- PRODUCTOS -->
+                <section class="cart-items-panel reveal">
+
+                    <div class="cart-panel-heading">
+                        <h2>Mis favoritos</h2>
+                        <span>SELECCIÓN ARTESANAL</span>
+                    </div>
+
+                    <div class="cart-products">
+
+                        {% for item in productos_carrito %}
+
+                            <article class="luxury-cart-item">
+
+                                <div class="cart-product-photo">
+                                    {% if item.producto.imagen %}
+                                        <img
+                                            src="{{ item.producto.imagen.url }}"
+                                            alt="{{ item.producto.nombre_producto }}"
+                                        >
+                                    {% else %}
+                                        <span>Bake & Made</span>
+                                    {% endif %}
+                                </div>
+
+                                <div class="cart-product-details">
+
+                                    <span class="cart-product-label">
+                                        HECHO CON AMOR
+                                    </span>
+
+                                    <h3>
+                                        {{ item.producto.nombre_producto }}
+                                    </h3>
+
+                                    <p class="cart-unit-price">
+                                        ${{ item.producto.precio_base }} MXN / unidad
+                                    </p>
+
+                                    <div class="cart-product-controls">
+
+                                        <form method="POST"
+                                              class="quantity-form"
+                                              action="{% url 'actualizar_carrito' item.producto.id %}">
+                                            {% csrf_token %}
+
+                                            <button type="submit"
+                                                    name="accion"
+                                                    value="disminuir"
+                                                    aria-label="Disminuir cantidad">
+                                                −
+                                            </button>
+
+                                            <span>{{ item.cantidad }}</span>
+
+                                            <button type="submit"
+                                                    name="accion"
+                                                    value="aumentar"
+                                                    aria-label="Aumentar cantidad">
+                                                +
+                                            </button>
+                                        </form>
+
+                                        <form method="POST"
+                                              action="{% url 'actualizar_carrito' item.producto.id %}">
+                                            {% csrf_token %}
+
+                                            <button class="remove-product"
+                                                    type="submit"
+                                                    name="accion"
+                                                    value="eliminar">
+                                                Eliminar
+                                            </button>
+                                        </form>
+
+                                    </div>
+
+                                </div>
+
+                                <div class="cart-item-total">
+                                    <small>SUBTOTAL</small>
+                                    <strong>${{ item.subtotal }} MXN</strong>
+                                </div>
+
+                            </article>
+
+                        {% endfor %}
+
+                    </div>
+
+                    <a class="continue-shopping"
+                       href="{% url 'inicio' %}#productos">
+                        ← Seguir descubriendo sabores
+                    </a>
+
+                </section>
+
+                <!-- RESUMEN -->
+                <aside class="cart-summary reveal">
+
+                    <div class="summary-decoration">✦</div>
+
+                    <span class="section-kicker">
+                        ALMOST YOURS
+                    </span>
+
+                    <h2>Tu pedido especial</h2>
+
+                    <p class="summary-description">
+                        Una pequeña selección de felicidad,
+                        preparada especialmente para ti.
+                    </p>
+
+                    <div class="summary-divider"></div>
+
+                    <div class="summary-row">
+                        <span>Subtotal</span>
+                        <strong>${{ total }} MXN</strong>
+                    </div>
+
+                    <div class="summary-row">
+                        <span>Envío</span>
+                        <span>Por calcular</span>
+                    </div>
+
+                    <div class="summary-divider"></div>
+
+                    <div class="summary-total">
+                        <span>Total de productos</span>
+                        <strong>${{ total }} MXN</strong>
+                    </div>
+
+                    <p class="summary-note">
+                        El costo de entrega se determinará
+                        antes de confirmar tu pedido.
+                    </p>
+
+                    
+                    <a href="{% url 'checkout' %}" class="boton-checkout">
+                        Continuar con mi pedido →
+                    </a>
+
+
+                    <div class="summary-footer">
+                        ✦ Hecho con amor, pensado para ti ✦
+                    </div>
+
+                </aside>
+
+            </div>
+
+        {% else %}
+
+            <section class="empty-cart reveal">
+
+                <div class="empty-cart-symbol">♡</div>
+
+                <h2>Tu historia dulce comienza aquí.</h2>
+
+                <p>
+                    Tu carrito está esperando su primer
+                    pequeño capricho.
+                </p>
+
+                <a class="premium-btn"
+                   href="{% url 'inicio' %}#productos">
+                    Descubrir colección <span>↗</span>
+                </a>
+
+            </section>
+
+        {% endif %}
+
+    </main>
+
+    <footer class="premium-footer">
+        <div class="footer-main">
+            <div>
+                <h2>Bake & Made</h2>
+                <p>Creaciones dulces para historias inolvidables.</p>
+            </div>
+
+            <div class="footer-links">
+                <a href="{% url 'inicio' %}">Inicio</a>
+                <a href="{% url 'inicio' %}#productos">Colección</a>
+                <a href="{% url 'ver_carrito' %}">Carrito</a>
+            </div>
+        </div>
+
+        <div class="footer-bottom">
+            <span>© 2026 Bake & Made</span>
+            <span>MADE WITH LOVE ✦</span>
+        </div>
+    </footer>
+
+</body>
+</html>

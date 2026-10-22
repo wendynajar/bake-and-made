@@ -1,0 +1,250 @@
+[
+{
+  "model": "tienda.categoriaproducto",
+  "pk": 1,
+  "fields": {
+    "nombre": "Cupcakes",
+    "descripcion": "Cupcakes tradicionales y personalizados."
+  }
+},
+{
+  "model": "tienda.categoriaproducto",
+  "pk": 2,
+  "fields": {
+    "nombre": "Pasteles",
+    "descripcion": "Pasteles para celebraciones y ocasiones especiales."
+  }
+},
+{
+  "model": "tienda.categoriaproducto",
+  "pk": 3,
+  "fields": {
+    "nombre": "Galletas",
+    "descripcion": "Galletas artesanales de diferentes sabores."
+  }
+},
+{
+  "model": "tienda.categoriaproducto",
+  "pk": 4,
+  "fields": {
+    "nombre": "Postres personalizados",
+    "descripcion": "Postres elaborados según las preferencias del cliente."
+  }
+},
+{
+  "model": "tienda.categoriaproducto",
+  "pk": 5,
+  "fields": {
+    "nombre": "Paquetes especiales",
+    "descripcion": "Combinaciones de productos para regalos y eventos."
+  }
+},
+{
+  "model": "tienda.menu",
+  "pk": 1,
+  "fields": {
+    "nombre_producto": "Cupcake de vainilla",
+    "descripcion": "Cupcake artesanal de vainilla con betún cremoso y decoración especial.",
+    "precio_base": "35.00",
+    "disponible": true,
+    "categoria": 1,
+    "imagen": "productos/descarga_1.jpg",
+    "stock": 17
+  }
+},
+{
+  "model": "tienda.menu",
+  "pk": 2,
+  "fields": {
+    "nombre_producto": "Cupcake de chocolate",
+    "descripcion": "Esponjoso cupcake de chocolate, decorado con crema de cacao y un toque de chocolate artesanal.",
+    "precio_base": "40.00",
+    "disponible": true,
+    "categoria": 1,
+    "imagen": "productos/descarga_2.jpg",
+    "stock": 17
+  }
+},
+{
+  "model": "tienda.menu",
+  "pk": 3,
+  "fields": {
+    "nombre_producto": "Cupcake red velvet",
+    "descripcion": "Cupcake de cacao suave con crema de queso y decoración artesanal.",
+    "precio_base": "45.00",
+    "disponible": true,
+    "categoria": 1,
+    "imagen": "productos/descarga_3.jpg",
+    "stock": 18
+  }
+},
+{
+  "model": "tienda.menu",
+  "pk": 4,
+  "fields": {
+    "nombre_producto": "Cupcake de fresa",
+    "descripcion": "Cupcake esponjoso de vainilla con crema de fresa.",
+    "precio_base": "40.00",
+    "disponible": true,
+    "categoria": 1,
+    "imagen": "productos/.jpg",
+    "stock": 20
+  }
+},
+{
+  "model": "tienda.menu",
+  "pk": 5,
+  "fields": {
+    "nombre_producto": "Cupcake de zanahoria",
+    "descripcion": "Cupcake de zanahoria con especias y betún de queso crema.",
+    "precio_base": "42.00",
+    "disponible": true,
+    "categoria": 1,
+    "imagen": "productos/Soft_Carrot_Cake_Cupcakes_With_Cream_Cheese_Frosting.jpg",
+    "stock": 20
+  }
+},
+{
+  "model": "tienda.menu",
+  "pk": 6,
+  "fields": {
+    "nombre_producto": "Galleta con chispas de chocolate",
+    "descripcion": "Galleta artesanal con chispas de chocolate semiamargo.",
+    "precio_base": "28.00",
+    "disponible": true,
+    "categoria": 3,
+    "imagen": "productos/Better_than_a_Bakery_Chocolate_Chip_Cookies.jpg",
+    "stock": 20
+  }
+},
+{
+  "model": "tienda.menu",
+  "pk": 7,
+  "fields": {
+    "nombre_producto": "Galleta red velvet",
+    "descripcion": "Galleta suave de cacao con chocolate blanco.",
+    "precio_base": "32.00",
+    "disponible": true,
+    "categoria": 3,
+    "imagen": "productos/descarga_4.jpg",
+    "stock": 20
+  }
+},
+{
+  "model": "tienda.menu",
+  "pk": 8,
+  "fields": {
+    "nombre_producto": "Galleta de mantequilla",
+    "descripcion": "Galleta tradicional de mantequilla con textura delicada.",
+    "precio_base": "25.00",
+    "disponible": true,
+    "categoria": 3,
+    "imagen": "productos/Pastisetas_con_Mantequilla.jpg",
+    "stock": 20
+  }
+},
+{
+  "model": "tienda.menu",
+  "pk": 9,
+  "fields": {
+    "nombre_producto": "Brownie de chocolate",
+    "descripcion": "Brownie de chocolate intenso con interior suave.",
+    "precio_base": "45.00",
+    "disponible": true,
+    "categoria": 4,
+    "imagen": "productos/descarga_5.jpg",
+    "stock": 20
+  }
+},
+{
+  "model": "tienda.menu",
+  "pk": 10,
+  "fields": {
+    "nombre_producto": "Cheesecake de fresa",
+    "descripcion": "Cheesecake cremoso con cobertura de fresa.",
+    "precio_base": "65.00",
+    "disponible": true,
+    "categoria": 4,
+    "imagen": "productos/descarga_6.jpg",
+    "stock": 20
+  }
+},
+{
+  "model": "tienda.menu",
+  "pk": 11,
+  "fields": {
+    "nombre_producto": "Pastel de chocolate",
+    "descripcion": "Pastel de chocolate con relleno y cobertura de ganache.",
+    "precio_base": "450.00",
+    "disponible": true,
+    "categoria": 2,
+    "imagen": "productos/Chocolate_Ganache_Cake_.jpg",
+    "stock": 20
+  }
+},
+{
+  "model": "tienda.menu",
+  "pk": 12,
+  "fields": {
+    "nombre_producto": "Pastel de tres leches",
+    "descripcion": "Pastel tradicional de tres leches con crema batida.",
+    "precio_base": "420.00",
+    "disponible": true,
+    "categoria": 2,
+    "imagen": "productos/descarga_7.jpg",
+    "stock": 20
+  }
+},
+{
+  "model": "tienda.menu",
+  "pk": 13,
+  "fields": {
+    "nombre_producto": "Pastel de zanahoria",
+    "descripcion": "Pastel de zanahoria con nuez y betún de queso crema.",
+    "precio_base": "480.00",
+    "disponible": true,
+    "categoria": 2,
+    "imagen": "productos/descarga_8.jpg",
+    "stock": 20
+  }
+},
+{
+  "model": "tienda.menu",
+  "pk": 14,
+  "fields": {
+    "nombre_producto": "Caja de 6 cupcakes",
+    "descripcion": "Caja de seis cupcakes artesanales de sabores variados.",
+    "precio_base": "210.00",
+    "disponible": true,
+    "categoria": 5,
+    "imagen": "productos/descarga_9.jpg",
+    "stock": 20
+  }
+},
+{
+  "model": "tienda.menu",
+  "pk": 15,
+  "fields": {
+    "nombre_producto": "Caja de regalo dulce",
+    "descripcion": "Selección de postres artesanales para regalar.",
+    "precio_base": "350.00",
+    "disponible": true,
+    "categoria": 5,
+    "imagen": "productos/A_Sweet_Story_to_Share.jpg",
+    "stock": 20
+  }
+},
+{
+  "model": "tienda.menu",
+  "pk": 16,
+  "fields": {
+    "nombre_producto": "PAra pasar la materoa",
+    "descripcion": "Necesario para pasar",
+    "precio_base": "10.00",
+    "disponible": true,
+    "categoria": 4,
+    "imagen": "productos/descarga_10.jpg",
+    "stock": 0
+  }
+}
+]
