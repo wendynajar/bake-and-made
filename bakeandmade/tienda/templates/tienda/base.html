@@ -1,0 +1,122 @@
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#fff9f6">
+    <meta name="description" content="Bake & Made: repostería artesanal y creaciones personalizadas.">
+
+    <title>{% block title %}Bake & Made | The Art of Sweet Moments{% endblock %}</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Great+Vibes&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{% static 'tienda/estilos.css' %}">
+    <link rel="stylesheet" href="{% static 'tienda/premium.css' %}">
+    <link rel="stylesheet" href="{% static 'tienda/personalizar.css' %}">
+
+    {% block extra_css %}{% endblock %}
+
+    <script src="{% static 'tienda/premium.js' %}" defer></script>
+</head>
+
+<body class="premium-site">
+
+    <div class="announcement">
+        <span>✦</span>
+        Pequeños detalles, grandes momentos
+        <span>✦</span>
+    </div>
+
+    <header class="premium-header" id="top">
+        <div class="header-inner">
+
+            <a class="brand" href="{% url 'inicio' %}">
+                Bake <span>&amp;</span> Made
+                <small>ARTISAN PATISSERIE</small>
+            </a>
+
+            <button class="mobile-menu-toggle"
+                    type="button"
+                    aria-label="Abrir menú"
+                    aria-expanded="false"
+                    aria-controls="main-navigation">
+                ☰
+            </button>
+
+            <nav class="premium-nav" id="main-navigation" aria-label="Navegación principal">
+                <a href="{% url 'inicio' %}#productos">Colección</a>
+                <a href="{% url 'inicio' %}#experiencia">Experiencia</a>
+                <a href="{% url 'inicio' %}#nosotros">Nuestra historia</a>
+                <a href="{% url 'suscripcion' %}">Planes</a>
+
+                <a href="{% url 'ver_carrito' %}" class="nav-cart">
+                    Carrito
+                    {% if contador_carrito > 0 %}
+                        <span class="cart-count">{{ contador_carrito }}</span>
+                    {% endif %}
+                    <span aria-hidden="true">↗</span>
+                </a>
+
+                {% if user.is_authenticated %}
+                    <span class="user-greeting">
+                        Hola, {{ user.first_name|default:user.username }}
+                    </span>
+                    {% if es_plan_sweet %}
+                        <span class="sweet-menu-badge">Sweet</span>
+                    {% endif %}
+
+                    <form method="POST" action="{% url 'logout' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="nav-account">
+                            Salir
+                        </button>
+                    </form>
+                {% else %}
+                    <a class="nav-account" href="{% url 'login' %}">
+                        Mi cuenta
+                    </a>
+                {% endif %}
+            </nav>
+
+        </div>
+    </header>
+
+    {% if messages %}
+        <div class="cart-messages" role="status">
+            {% for message in messages %}
+                <p>{{ message }}</p>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="premium-footer">
+        <div class="footer-main">
+            <div>
+                <h2>Bake &amp; Made</h2>
+                <p>Creaciones dulces para historias inolvidables.</p>
+            </div>
+
+            <div class="footer-links">
+                <a href="{% url 'inicio' %}#productos">Colección</a>
+                <a href="{% url 'inicio' %}#experiencia">Experiencia</a>
+                <a href="{% url 'inicio' %}#nosotros">Nuestra historia</a>
+                <a href="{% url 'ver_carrito' %}">Carrito</a>
+            </div>
+        </div>
+
+        <div class="footer-bottom">
+            <span>© 2026 Bake &amp; Made</span>
+            <span>MADE WITH LOVE ✦</span>
+        </div>
+    </footer>
+
+</body>
+</html>

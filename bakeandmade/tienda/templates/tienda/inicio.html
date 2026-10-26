@@ -47,6 +47,7 @@
                 <a href="#productos">Colección</a>
                 <a href="#experiencia">Experiencia</a>
                 <a href="#nosotros">Nuestra historia</a>
+                <a href="{% url 'suscripcion' %}">Planes</a>
                 
                 <a href="{% url 'ver_carrito' %}" class="nav-cart">
                     Carrito
@@ -276,7 +277,7 @@
                     debe ser tan única como la persona que la recibe.
                 </p>
 
-                <a href="#nosotros" class="premium-btn premium-btn-light">
+                <a href="{% url 'personalizar' %}" class="premium-btn premium-btn-light">
                     Descubre nuestra esencia <span>↗</span>
                 </a>
             </div>

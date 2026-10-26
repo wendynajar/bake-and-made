@@ -1,0 +1,45 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirmar Sweet Plan | Bake & Made</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Great+Vibes&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'tienda/estilos.css' %}">
+    <link rel="stylesheet" href="{% static 'tienda/premium.css' %}">
+    <script src="{% static 'tienda/premium.js' %}" defer></script>
+</head>
+<body class="premium-site">
+    <div class="announcement"><span>✦</span> PEQUEÑOS DETALLES, GRANDES MOMENTOS <span>✦</span></div>
+    <header class="premium-header">
+        <div class="header-inner">
+            <a class="brand" href="{% url 'inicio' %}">Bake & Made<small>ARTISAN PATISSERIE</small></a>
+            <nav class="premium-nav" aria-label="Navegación principal">
+                <a href="{% url 'inicio' %}">Inicio</a>
+                <a href="{% url 'suscripcion' %}">Planes</a>
+                <a href="{% url 'ver_carrito' %}">Carrito</a>
+                {% if es_plan_sweet %}<span class="sweet-menu-badge">Sweet</span>{% endif %}
+            </nav>
+        </div>
+    </header>
+    <main class="plans-page confirmation-page">
+        <section class="plan-confirmation-card reveal">
+            <span class="section-kicker">UN PASO MÁS HACIA TU EXPERIENCIA SWEET</span>
+            <h1>Confirma tu <em>Sweet Plan.</em></h1>
+            <p class="plan-confirmation-price">${{ precio_sweet_plan|floatformat:2 }} MXN <span>/ mes</span></p>
+            <p>Tu periodo comienza hoy y dura un mes.</p>
+            <form method="post" action="{% url 'confirmar_suscripcion' %}">
+                {% csrf_token %}
+                <button class="plan-button plan-button-primary" type="submit">Confirmar suscripción</button>
+            </form>
+            <a class="plan-back-link" href="{% url 'suscripcion' %}">Volver a los planes</a>
+        </section>
+    </main>
+    <footer class="premium-footer">
+        <div class="footer-bottom"><span>© 2026 Bake & Made</span><span>MADE WITH LOVE ✦</span></div>
+    </footer>
+</body>
+</html>

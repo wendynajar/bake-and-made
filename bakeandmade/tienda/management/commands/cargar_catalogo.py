@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from tienda.models import Menu, CategoriaProducto
+from tienda.models import Menu, CategoriaProducto, CategoriaIngrediente, Ingrediente
 
 
 PRODUCTOS = [
@@ -35,6 +35,34 @@ PRODUCTOS = [
      "Selección de postres artesanales para regalar."),
 ]
 
+CATEGORIAS_INGREDIENTES = [
+    "Base",
+    "Relleno",
+    "Cobertura",
+    "Topping",
+]
+
+INGREDIENTES = [
+    # Categoría, nombre, precio adicional
+    ("Base", "Vainilla", "0.00"),
+    ("Base", "Chocolate", "5.00"),
+    ("Base", "Red velvet", "8.00"),
+    ("Base", "Zanahoria", "6.00"),
+
+    ("Relleno", "Crema de vainilla", "0.00"),
+    ("Relleno", "Chocolate", "5.00"),
+    ("Relleno", "Dulce de leche", "6.00"),
+    ("Relleno", "Fresa", "5.00"),
+
+    ("Cobertura", "Buttercream de vainilla", "0.00"),
+    ("Cobertura", "Buttercream de chocolate", "5.00"),
+    ("Cobertura", "Queso crema", "7.00"),
+
+    ("Topping", "Chispas de chocolate", "2.00"),
+    ("Topping", "Galleta triturada", "3.00"),
+    ("Topping", "Sprinkles de colores", "2.00"),
+    ("Topping", "Fresas", "5.00"),
+]
 
 class Command(BaseCommand):
     help = "Carga el catálogo inicial de Bake & Made"
@@ -43,6 +71,61 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         creados = 0
         existentes = 0
+
+        categorias_creadas = 0
+
+        for nombre in CATEGORIAS_INGREDIENTES:
+            categoria, creada = (
+                CategoriaIngrediente.objects.get_or_create(
+                    nombre=nombre
+                )
+            )
+
+            if creada:
+                categorias_creadas += 1
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Categoría de ingrediente creada: {nombre}"
+                    )
+                )
+            else:
+                self.stdout.write(
+                    f"La categoría de ingrediente ya existe: {nombre}"
+                )
+
+        ingredientes_creados = 0
+
+        for categoria_nombre, nombre, precio in INGREDIENTES:
+            categoria = CategoriaIngrediente.objects.get(
+                nombre=categoria_nombre
+            )
+
+            ingrediente, creado = Ingrediente.objects.get_or_create(
+                categoria=categoria,
+                nombre=nombre,
+                defaults={
+                    "precio_adicional": Decimal(precio),
+                    "stock_disponible": 100,
+                    "solo_suscriptores": False,
+                    "activo": True,
+                },
+            )
+
+            if creado:
+                ingredientes_creados += 1
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Ingrediente creado: {nombre}"
+                    )
+                )
+            else:
+                self.stdout.write(
+                    f"Ingrediente ya existente: {nombre}"
+                )
+
+        self.stdout.write(
+            f"Ingredientes nuevos: {ingredientes_creados}"
+        )
 
         for nombre, categoria_nombre, precio, descripcion in PRODUCTOS:
             categoria, _ = CategoriaProducto.objects.get_or_create(

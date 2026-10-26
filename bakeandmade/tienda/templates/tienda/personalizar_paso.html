@@ -1,0 +1,158 @@
+{% extends "tienda/base.html" %}
+
+{% block title %}{{ definicion.nombre }} | Bake & Made{% endblock %}
+
+{% block content %}
+<section class="wizard">
+    <a href="{% url 'inicio' %}" class="back-link">
+        ← Volver a la tienda
+    </a>
+
+    <p class="eyebrow">CREA ALGO ÚNICO</p>
+    <h1>Tu cupcake, a tu manera</h1>
+    <p class="intro">{{ definicion.descripcion }}</p>
+
+    <div class="progress-info">
+        <span>Paso {{ numero_paso }} de {{ total_pasos }}</span>
+        <span>{{ definicion.nombre }}</span>
+    </div>
+
+    <div
+        class="progress-track"
+        role="progressbar"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow="{{ numero_paso|add:'0' }}"
+    >
+        <svg class="progress-fill" viewBox="0 0 100 1" preserveAspectRatio="none" aria-hidden="true">
+            <rect x="0" y="0" width="{% widthratio numero_paso total_pasos 100 %}" height="1"></rect>
+        </svg>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+
+        {% if volver_resumen %}
+            <input type="hidden" name="volver_resumen" value="1">
+        {% endif %}
+
+        <div class="option-grid">
+            {% for opcion in opciones %}
+                <label class="option-card">
+                    <input
+                        type="radio"
+                        name="ingrediente"
+                        value="{{ opcion.pk }}"
+                        required
+                        {% if seleccion_actual and seleccion_actual.pk == opcion.pk %}
+                            checked
+                        {% endif %}
+                    >
+
+                    {% if opcion.imagen %}
+                        <img
+                            class="option-image"
+                            src="{{ opcion.imagen.url }}"
+                            alt="{{ opcion.nombre }}"
+                        >
+                    {% else %}
+                        <div class="image-placeholder" aria-hidden="true">
+                            <span>🧁</span>
+                        </div>
+                    {% endif %}
+
+                    <span class="option-name">{{ opcion.nombre }}</span>
+
+                    {% if opcion.precio_adicional > 0 %}
+                        <span class="option-price">
+                            +${{ opcion.precio_adicional }}
+                        </span>
+                    {% else %}
+                        <span class="option-price included">
+                            Incluido
+                        </span>
+                    {% endif %}
+                </label>
+            {% empty %}
+                <p>
+                    Aún no hay opciones activas para esta categoría.
+                    Agrégalas desde el administrador de Django.
+                </p>
+            {% endfor %}
+        </div>
+
+        {% if paso == "base" %}
+            <section class="extra-section">
+                <h2>Preferencias dietarias</h2>
+                <p>Opcional: selecciona las que necesites.</p>
+
+                <div class="diet-grid">
+                    {% for clave, nombre in dietas.items %}
+                        <label class="diet-option">
+                            <input
+                                type="checkbox"
+                                name="dietas"
+                                value="{{ clave }}"
+                                {% if clave in dietas_elegidas %}checked{% endif %}
+                            >
+                            {{ nombre }}
+                        </label>
+                    {% endfor %}
+                </div>
+            </section>
+        {% endif %}
+
+        {% if paso == "cobertura" %}
+            <section class="extra-section">
+                <h2>El color de tu frosting</h2>
+                <div class="color-field">
+                    <label for="color_frosting">Elige un color</label>
+                    <select
+                        name="color_frosting"
+                        id="color_frosting"
+                        required
+                    >
+                        <option value="">Selecciona un color</option>
+                        {% for clave, nombre in colores_frosting.items %}
+                            <option
+                                value="{{ clave }}"
+                                {% if color_frosting == clave %}selected{% endif %}
+                            >
+                                {{ nombre }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </section>
+        {% endif %}
+
+        <div class="wizard-actions">
+            {% if numero_paso > 1 %}
+                {% if paso_anterior %}
+                    <a
+                        class="button button-secondary"
+                        href="{% url 'personalizar_paso' paso=paso_anterior %}{% if volver_resumen %}?volver=resumen{% endif %}"
+                    >
+                        ← Anterior
+                    </a>
+                {% endif %}
+            {% endif %}
+
+            <button class="button button-primary" type="submit">
+                {% if volver_resumen %}
+                    Guardar cambios
+                {% elif paso == "topping" %}
+                    Ver resumen →
+                {% else %}
+                    Continuar →
+                {% endif %}
+            </button>
+        </div>
+
+        <p class="price-note">
+            Precio base: ${{ precio_base }}.
+            El total se calculará al terminar.
+        </p>
+    </form>
+</section>
+{% endblock %}

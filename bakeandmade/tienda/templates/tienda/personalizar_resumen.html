@@ -1,0 +1,105 @@
+{% extends "tienda/base.html" %}
+{% load wizard_filters %}
+
+{% block title %}Resumen de tu cupcake | Bake & Made{% endblock %}
+
+{% block content %}
+<section class="wizard">
+    <a href="{% url 'inicio' %}" class="back-link">
+        ← Volver a la tienda
+    </a>
+
+    <p class="eyebrow">TU CREACIÓN</p>
+    <h1>Tu cupcake personalizado</h1>
+    <p class="intro">Revisa tu selección antes de agregarla al carrito.</p>
+
+    <div class="progress-info">
+        <span>Paso 5 de 5</span>
+        <span>Resumen final</span>
+    </div>
+    <div class="progress-track">
+        <div class="progress-fill" style="width: 100%"></div>
+    </div>
+
+    <div class="summary-list">
+        {% for item in pasos %}
+            <article class="summary-item">
+                <div>
+                    <span class="summary-label">{{ item.nombre }}</span>
+                    {% with ingrediente=selecciones|dict_get:item.slug %}
+                        {% if ingrediente %}
+                            <h2>{{ ingrediente.nombre }}</h2>
+                            <p>
+                                {% if ingrediente.precio_adicional > 0 %}
+                                    Extra: ${{ ingrediente.precio_adicional }}
+                                {% else %}
+                                    Incluido en el precio base
+                                {% endif %}
+                            </p>
+                        {% endif %}
+                    {% endwith %}
+                </div>
+
+                <a
+                    class="edit-link"
+                    href="{% url 'personalizar_paso' paso=item.slug %}?volver=resumen"
+                >
+                    Editar
+                </a>
+            </article>
+        {% endfor %}
+
+        <article class="summary-item">
+            <div>
+                <span class="summary-label">Color del frosting</span>
+                <h2>{{ color_frosting|default:"Sin especificar" }}</h2>
+            </div>
+            <a
+                class="edit-link"
+                href="{% url 'personalizar_paso' paso='cobertura' %}?volver=resumen"
+            >
+                Editar
+            </a>
+        </article>
+
+        <article class="summary-item">
+            <div>
+                <span class="summary-label">Preferencias dietarias</span>
+                <h2>
+                    {% for dieta in dietas_elegidas %}
+                        {{ dieta }}{% if not forloop.last %}, {% endif %}
+                    {% empty %}
+                        Ninguna seleccionada
+                    {% endfor %}
+                </h2>
+            </div>
+            <a
+                class="edit-link"
+                href="{% url 'personalizar_paso' paso='base' %}?volver=resumen"
+            >
+                Editar
+            </a>
+        </article>
+    </div>
+
+    <div class="total-panel">
+        <span>Precio total</span>
+        <strong>${{ precio_total }}</strong>
+        <small>Precio calculado en el servidor.</small>
+    </div>
+
+    <form
+        method="post"
+        action="{% url 'agregar_cupcake_personalizado' %}"
+    >
+        {% csrf_token %}
+        <button class="button button-primary button-full" type="submit">
+            Agregar al carrito
+        </button>
+    </form>
+
+    <a class="restart-link" href="{% url 'personalizar' %}">
+        Empezar una nueva creación
+    </a>
+</section>
+{% endblock %}

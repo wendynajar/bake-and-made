@@ -28,7 +28,7 @@
   "pk": 4,
   "fields": {
     "nombre": "Postres personalizados",
-    "descripcion": "Postres elaborados según las preferencias del cliente."
+    "descripcion": "Postres elaborados segÃºn las preferencias del cliente."
   }
 },
 {
@@ -44,7 +44,7 @@
   "pk": 1,
   "fields": {
     "nombre_producto": "Cupcake de vainilla",
-    "descripcion": "Cupcake artesanal de vainilla con betún cremoso y decoración especial.",
+    "descripcion": "Cupcake artesanal de vainilla con betÃºn cremoso y decoraciÃ³n especial.",
     "precio_base": "35.00",
     "disponible": true,
     "categoria": 1,
@@ -70,7 +70,7 @@
   "pk": 3,
   "fields": {
     "nombre_producto": "Cupcake red velvet",
-    "descripcion": "Cupcake de cacao suave con crema de queso y decoración artesanal.",
+    "descripcion": "Cupcake de cacao suave con crema de queso y decoraciÃ³n artesanal.",
     "precio_base": "45.00",
     "disponible": true,
     "categoria": 1,
@@ -96,7 +96,7 @@
   "pk": 5,
   "fields": {
     "nombre_producto": "Cupcake de zanahoria",
-    "descripcion": "Cupcake de zanahoria con especias y betún de queso crema.",
+    "descripcion": "Cupcake de zanahoria con especias y betÃºn de queso crema.",
     "precio_base": "42.00",
     "disponible": true,
     "categoria": 1,
@@ -200,7 +200,7 @@
   "pk": 13,
   "fields": {
     "nombre_producto": "Pastel de zanahoria",
-    "descripcion": "Pastel de zanahoria con nuez y betún de queso crema.",
+    "descripcion": "Pastel de zanahoria con nuez y betÃºn de queso crema.",
     "precio_base": "480.00",
     "disponible": true,
     "categoria": 2,
@@ -226,7 +226,7 @@
   "pk": 15,
   "fields": {
     "nombre_producto": "Caja de regalo dulce",
-    "descripcion": "Selección de postres artesanales para regalar.",
+    "descripcion": "SelecciÃ³n de postres artesanales para regalar.",
     "precio_base": "350.00",
     "disponible": true,
     "categoria": 5,

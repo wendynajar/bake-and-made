@@ -46,12 +46,16 @@
                 <a href="{% url 'inicio' %}">Inicio</a>
                 <a href="{% url 'inicio' %}#productos">Colección</a>
                 <a href="{% url 'inicio' %}#nosotros">Nuestra historia</a>
+                <a href="{% url 'suscripcion' %}">Planes</a>
                 <a href="{% url 'ver_carrito' %}">Mi carrito</a>
 
                 {% if user.is_authenticated %}
                     <span class="user-greeting">
                         Hola, {{ user.first_name|default:user.username }}
                     </span>
+                    {% if es_plan_sweet %}
+                        <span class="sweet-menu-badge">Sweet</span>
+                    {% endif %}
                     <form method="POST" action="{% url 'logout' %}">
                         {% csrf_token %}
                         <button class="nav-account" type="submit">
@@ -110,40 +114,107 @@
 
                     <div class="cart-products">
 
-                        {% for item in productos_carrito %}
+                        
+                    {% for item in productos_carrito %}
+                        <article class="luxury-cart-item">
 
-                            <article class="luxury-cart-item">
+                            <div class="cart-product-photo">
+                                {% if item.tipo == 'personalizado' %}
+                                    <span>♡ Bake & Made</span>
+                                {% elif item.producto.imagen %}
+                                    <img
+                                        src="{{ item.producto.imagen.url }}"
+                                        alt="{{ item.producto.nombre_producto }}"
+                                    >
+                                {% else %}
+                                    <span>Bake & Made</span>
+                                {% endif %}
+                            </div>
 
-                                <div class="cart-product-photo">
-                                    {% if item.producto.imagen %}
-                                        <img
-                                            src="{{ item.producto.imagen.url }}"
-                                            alt="{{ item.producto.nombre_producto }}"
-                                        >
-                                    {% else %}
-                                        <span>Bake & Made</span>
-                                    {% endif %}
-                                </div>
+                            <div class="cart-product-details">
 
-                                <div class="cart-product-details">
+                                {% if item.tipo == 'personalizado' %}
+                                    <span class="cart-product-label">
+                                        CREADO POR TI
+                                    </span>
 
+                                    <h3>{{ item.nombre }}</h3>
+
+                                    <p class="cart-unit-price">
+                                        ${{ item.precio_unitario|floatformat:2 }} MXN / unidad
+                                    </p>
+
+                                    <div class="custom-ingredients">
+                                        <strong>Tu creación:</strong>
+
+                                        <ul>
+                                            {% for ingrediente in item.ingredientes %}
+                                                <li>
+                                                    <strong>{{ ingrediente.paso }}:</strong>
+                                                    {{ ingrediente.nombre }}
+                                                </li>
+                                            {% endfor %}
+                                        </ul>
+
+                                        {% if item.dietas %}
+                                            <p>
+                                                <strong>Preferencias:</strong>
+                                                {{ item.dietas|join:", " }}
+                                            </p>
+                                        {% endif %}
+
+                                        {% if item.color_frosting %}
+                                            <p>
+                                                <strong>Color de cobertura:</strong>
+                                                {{ item.color_frosting }}
+                                            </p>
+                                        {% endif %}
+                                    </div>
+
+                                    <div class="cart-product-controls">
+
+                                        <form method="post"
+                                            action="{% url 'actualizar_cupcake_personalizado' item.indice_personalizado %}"
+                                            class="quantity-form">
+                                            {% csrf_token %}
+
+                                            <button type="submit" name="accion" value="restar"
+                                                    {% if item.cantidad <= 1 %}disabled{% endif %}>
+                                                −
+                                            </button>
+
+                                            <span>{{ item.cantidad }}</span>
+
+                                            <button type="submit" name="accion" value="sumar">
+                                                +
+                                            </button>
+                                        </form>
+
+                                        <form method="post"
+                                            action="{% url 'eliminar_cupcake_personalizado' item.indice_personalizado %}">
+                                            {% csrf_token %}
+                                            <button type="submit" class="remove-product">
+                                                Eliminar
+                                            </button>
+                                        </form>
+
+                                    </div>
+
+                                {% else %}
                                     <span class="cart-product-label">
                                         HECHO CON AMOR
                                     </span>
 
-                                    <h3>
-                                        {{ item.producto.nombre_producto }}
-                                    </h3>
+                                    <h3>{{ item.producto.nombre_producto }}</h3>
 
                                     <p class="cart-unit-price">
-                                        ${{ item.producto.precio_base }} MXN / unidad
+                                        ${{ item.producto.precio_base|floatformat:2 }} MXN / unidad
                                     </p>
 
                                     <div class="cart-product-controls">
-
                                         <form method="POST"
-                                              class="quantity-form"
-                                              action="{% url 'actualizar_carrito' item.producto.id %}">
+                                            class="quantity-form"
+                                            action="{% url 'actualizar_carrito' item.producto.id %}">
                                             {% csrf_token %}
 
                                             <button type="submit"
@@ -164,7 +235,7 @@
                                         </form>
 
                                         <form method="POST"
-                                              action="{% url 'actualizar_carrito' item.producto.id %}">
+                                            action="{% url 'actualizar_carrito' item.producto.id %}">
                                             {% csrf_token %}
 
                                             <button class="remove-product"
@@ -174,19 +245,19 @@
                                                 Eliminar
                                             </button>
                                         </form>
-
                                     </div>
+                                {% endif %}
 
-                                </div>
+                            </div>
 
-                                <div class="cart-item-total">
-                                    <small>SUBTOTAL</small>
-                                    <strong>${{ item.subtotal }} MXN</strong>
-                                </div>
+                            <div class="cart-item-total">
+                                <small>SUBTOTAL</small>
+                                <strong>${{ item.subtotal|floatformat:2 }} MXN</strong>
+                            </div>
 
-                            </article>
+                        </article>
+                    {% endfor %}
 
-                        {% endfor %}
 
                     </div>
 

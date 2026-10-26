@@ -1,0 +1,131 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#fff9f6">
+    <title>Planes | Bake & Made</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Great+Vibes&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'tienda/estilos.css' %}">
+    <link rel="stylesheet" href="{% static 'tienda/premium.css' %}">
+    <script src="{% static 'tienda/premium.js' %}" defer></script>
+</head>
+<body class="premium-site">
+    <div class="announcement"><span>✦</span> PEQUEÑOS DETALLES, GRANDES MOMENTOS <span>✦</span></div>
+
+    <header class="premium-header">
+        <div class="header-inner">
+            <a class="brand" href="{% url 'inicio' %}">
+                Bake & Made
+                <small>ARTISAN PATISSERIE</small>
+            </a>
+            <button class="mobile-menu-toggle" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="main-navigation">☰</button>
+            <nav class="premium-nav" id="main-navigation" aria-label="Navegación principal">
+                <a href="{% url 'inicio' %}">Inicio</a>
+                <a href="{% url 'inicio' %}#productos">Colección</a>
+                <a href="#nosotros">Nuestra historia</a>
+                <a href="{% url 'suscripcion' %}">Planes</a>
+                <a href="{% url 'ver_carrito' %}" class="nav-cart">
+                    Carrito
+                    {% if contador_carrito > 0 %}<span class="cart-count">{{ contador_carrito }}</span>{% endif %}
+                </a>
+                {% if user.is_authenticated %}
+                    <span class="user-greeting">Hola, {{ user.first_name|default:user.username }}</span>
+                    {% if es_plan_sweet %}<span class="sweet-menu-badge">Sweet</span>{% endif %}
+                    <form method="POST" action="{% url 'logout' %}">
+                        {% csrf_token %}<button type="submit" class="nav-account">Salir</button>
+                    </form>
+                {% else %}
+                    <a class="nav-account" href="{% url 'login' %}?next={% url 'suscripcion' %}">Mi cuenta</a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    {% if messages %}
+        <div class="cart-messages" role="status">
+            {% for message in messages %}<p>{{ message }}</p>{% endfor %}
+        </div>
+    {% endif %}
+
+    <main class="plans-page">
+        <section class="plans-heading reveal">
+            <span class="section-kicker">TU EXPERIENCIA, A TU MANERA</span>
+            <h1>Elige tu plan <em>más dulce.</em></h1>
+            <p>Dos opciones sencillas para disfrutar Bake & Made.</p>
+        </section>
+
+        <section class="plans-grid" aria-label="Planes disponibles">
+            <article class="plan-card reveal {% if user.is_authenticated and plan_usuario == 'basic' %}plan-card-current{% endif %}">
+                <span class="plan-eyebrow">SIEMPRE CONTIGO</span>
+                <h2>Basic</h2>
+                <p class="plan-description">Lo esencial para comenzar.</p>
+                <p class="plan-price">Gratis</p>
+                <p class="plan-period">Sin costo mensual</p>
+                <div class="plan-divider"></div>
+                <!-- Lista de beneficios Basic: puedes editarla aquí. -->
+                <ul class="plan-benefits">
+                    <li>Acceso a ingredientes que no son exclusivos para suscriptores.</li>
+                </ul>
+                <div class="plan-card-action">
+                    {% if user.is_authenticated and plan_usuario == 'basic' %}
+                        <span class="plan-current-label">Plan actual</span>
+                    {% elif not user.is_authenticated %}
+                        <a class="plan-button plan-button-secondary" href="{% url 'login' %}?next={% url 'suscripcion' %}">Elegir Basic</a>
+                    {% else %}
+                        <span class="plan-muted-note">Disponible al terminar tu periodo Sweet.</span>
+                    {% endif %}
+                </div>
+            </article>
+
+            <article class="plan-card plan-card-sweet reveal {% if user.is_authenticated and plan_usuario == 'sweet' %}plan-card-current{% endif %}">
+                <span class="plan-eyebrow">UNA EXPERIENCIA ESPECIAL</span>
+                <h2>Sweet <span class="plan-sparkle">✦</span></h2>
+                <p class="plan-description">Para crear con ingredientes exclusivos.</p>
+                <p class="plan-price"><span>$</span>{{ precio_sweet_plan|floatformat:2 }} <small>MXN</small></p>
+                <p class="plan-period">por mes</p>
+                <div class="plan-divider"></div>
+                <!-- Lista de beneficios Sweet: añade aquí nuevos beneficios cuando existan. -->
+                <ul class="plan-benefits">
+                    <li>Acceso a ingredientes marcados como exclusivos para suscriptores.</li>
+                </ul>
+                <div class="plan-card-action">
+                    {% if user.is_authenticated and plan_usuario == 'sweet' %}
+                        <span class="plan-current-label">Plan actual</span>
+                        {% if suscripcion_usuario.estado == 'cancelada' %}
+                            <p class="plan-status-note">Cancelado; conservarás el acceso hasta el {{ suscripcion_usuario.fecha_fin|date:"j F Y" }}.</p>
+                        {% else %}
+                            <p class="plan-status-note">Próximo vencimiento: {{ suscripcion_usuario.fecha_fin|date:"j F Y" }}.</p>
+                            <form method="post" action="{% url 'cancelar_suscripcion' %}" class="plan-cancel-form">
+                                {% csrf_token %}
+                                <button class="plan-button plan-button-cancel" type="submit">Cancelar suscripción</button>
+                            </form>
+                        {% endif %}
+                    {% elif not user.is_authenticated %}
+                        <a class="plan-button plan-button-primary" href="{% url 'login' %}?next={% url 'suscripcion' %}">Suscribirme</a>
+                    {% else %}
+                        <a class="plan-button plan-button-primary" href="{% url 'confirmar_suscripcion' %}">Suscribirme</a>
+                    {% endif %}
+                </div>
+            </article>
+        </section>
+
+        <p class="plans-footnote">La suscripción se confirma de forma simulada. No se solicita ni almacena información de tarjetas.</p>
+    </main>
+
+    <footer class="premium-footer">
+        <div class="footer-main">
+            <div><h2>Bake & Made</h2><p>Creaciones dulces para historias inolvidables.</p></div>
+            <div class="footer-links">
+                <a href="{% url 'inicio' %}">Inicio</a>
+                <a href="{% url 'suscripcion' %}">Planes</a>
+                <a href="{% url 'ver_carrito' %}">Carrito</a>
+            </div>
+        </div>
+        <div class="footer-bottom"><span>© 2026 Bake & Made</span><span>MADE WITH LOVE ✦</span></div>
+    </footer>
+</body>
+</html>

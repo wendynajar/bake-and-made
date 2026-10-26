@@ -5,10 +5,23 @@ from .models import (
     CupcakeIngredientes, Pedido, DetallePedido, ExperienciaQR, CategoriaProducto
 )
 
-admin.site.register(Suscripcion)
-admin.site.register(RecordatorioEvento)
-admin.site.register(CategoriaIngrediente)
-admin.site.register(Ingrediente)
+@admin.register(CategoriaIngrediente)
+class CategoriaIngredienteAdmin(admin.ModelAdmin):
+    list_display = ('id', 'nombre')
+    search_fields = ('nombre',)
+
+@admin.register(Ingrediente)
+class IngredienteAdmin(admin.ModelAdmin):
+    list_display = (
+        'nombre',
+        'categoria',
+        'precio_adicional',
+        'activo',
+        'stock_disponible',
+    )
+    list_filter = ('categoria', 'activo', 'solo_suscriptores')
+    search_fields = ('nombre',)
+    list_editable = ('activo',)
 
 @admin.register(Menu)
 class MenuAdmin(admin.ModelAdmin):
@@ -37,6 +50,25 @@ class MenuAdmin(admin.ModelAdmin):
 
     list_per_page = 20
 
+@admin.register(Suscripcion)
+class SuscripcionAdmin(admin.ModelAdmin):
+    list_display = (
+        'usuario',
+        'estado',
+        'fecha_inicio',
+        'fecha_fin',
+        'monto_mensual',
+    )
+    list_filter = ('estado',)
+    search_fields = (
+        'usuario__username',
+        'usuario__first_name',
+        'usuario__last_name',
+        'usuario__email',
+    )
+    list_select_related = ('usuario',)
+    
+admin.site.register(RecordatorioEvento)
 admin.site.register(DetallesMenu)
 admin.site.register(CupcakePersonalizado)
 admin.site.register(CupcakeIngredientes)

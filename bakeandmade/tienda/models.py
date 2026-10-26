@@ -42,6 +42,13 @@ class Ingrediente(models.Model):
     precio_adicional = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
     solo_suscriptores = models.BooleanField(default=False)
     stock_disponible = models.IntegerField(default=0)
+    imagen = models.ImageField(
+        upload_to='ingredientes/',
+        blank=True,
+        null=True
+    )
+    activo = models.BooleanField(default=True)
+
 
     def __str__(self):
         return self.nombre
