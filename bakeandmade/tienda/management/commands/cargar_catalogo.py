@@ -1,4 +1,10 @@
+"""Comando `cargar_catalogo`: datos iniciales del catálogo (se puede ejecutar varias veces).
+
+Usa get_or_create, por lo que es seguro incluirlo en el build de Render.
+"""
+
 from decimal import Decimal
+from typing import Any
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -65,10 +71,13 @@ INGREDIENTES = [
 ]
 
 class Command(BaseCommand):
+    """Carga el catálogo inicial de Bake & Made."""
+
     help = "Carga el catálogo inicial de Bake & Made"
 
     @transaction.atomic
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> None:
+        """Crea categorías, ingredientes y productos que falten; no modifica los existentes."""
         creados = 0
         existentes = 0
 

@@ -1,10 +1,17 @@
+"""Formularios de la app de usuarios."""
+
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 
 
-
 class RegistroUsuarioForm(UserCreationForm):
+    """Registro de cliente con nombre, apellidos y correo obligatorio y único.
+
+    El correo se exige único (sin distinguir mayúsculas) porque será el canal
+    de contacto para pedidos y recordatorios.
+    """
+
     username = forms.CharField(
         max_length=150,
         required=True,
@@ -52,8 +59,9 @@ class RegistroUsuarioForm(UserCreationForm):
             'password2'
         )
 
-    def clean_email(self):
-        email = self.cleaned_data['email'].strip().lower()
+    def clean_email(self) -> str:
+        """Normaliza el correo y rechaza los que ya estén registrados."""
+        email =self.cleaned_data['email'].strip().lower()
 
         if User.objects.filter(email__iexact=email).exists():
             raise forms.ValidationError(

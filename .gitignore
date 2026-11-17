@@ -378,3 +378,5 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+# Metadatos de Windows al copiar archivos a WSL
+*:Zone.Identifier

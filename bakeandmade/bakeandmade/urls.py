@@ -1,85 +1,17 @@
-from django.contrib.auth.views import LoginView, LogoutView
-from django.contrib import admin
-from django.urls import path
+"""Rutas raíz del proyecto: cada app declara las suyas en su propio urls.py."""
+
 from django.conf import settings
 from django.conf.urls.static import static
-from tienda import views
-
+from django.contrib import admin
+from django.urls import include, path
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', views.inicio, name='inicio'),
-    path('registro/', views.registro, name='registro'),
-    
-    path(
-    'login/',
-    LoginView.as_view(template_name='tienda/login.html'),
-    name='login'
-    ),
-
-    path(
-        'carrito/agregar/<int:producto_id>/',
-        views.agregar_carrito,
-        name='agregar_carrito'
-    ),
-    
-    path('logout/', LogoutView.as_view(next_page='inicio'), name='logout'),
-    
-    path(
-    'carrito/',
-    views.ver_carrito,
-    name='ver_carrito'
-    ),
-
-    path('checkout/', views.checkout, name='checkout'),
-
-    path(
-    'carrito/actualizar/<int:producto_id>/',
-    views.actualizar_carrito,
-    name='actualizar_carrito'
-    ),
-
-    path('pedido-confirmado/<int:pedido_id>/', views.pedido_confirmado, name='pedido_confirmado'),
-
-    path(
-        "personalizar/",
-        views.personalizar_cupcake,
-        {"paso": "base"},
-        name="personalizar",
-    ),
-    path(
-            "personalizar/agregar/",
-            views.agregar_cupcake_personalizado,
-            name="agregar_cupcake_personalizado",
-        ),
-    path(
-        "personalizar/<str:paso>/",
-        views.personalizar_cupcake,
-        name="personalizar_paso",
-    ),
-
-    path(
-        'carrito/personalizado/<int:indice>/actualizar/',
-        views.actualizar_cupcake_personalizado,
-        name='actualizar_cupcake_personalizado',
-    ),
-    
-    path(
-        'carrito/personalizado/<int:indice>/eliminar/',
-        views.eliminar_cupcake_personalizado,
-        name='eliminar_cupcake_personalizado',
-    ),
-
-    path('suscripcion/', views.pagina_suscripcion, name='suscripcion'),
-    path('suscripcion/confirmar/', views.confirmar_suscripcion, name='confirmar_suscripcion'),
-    path('suscripcion/cancelar/', views.cancelar_suscripcion, name='cancelar_suscripcion'),
+    path('', include('usuarios.urls')),
+    path('', include('tienda.urls')),
 ]
 
-
-# Mostrar imágenes durante el desarrollo
-if settings.DEBUG:
-    urlpatterns += static(
-        settings.MEDIA_URL,
-        document_root=settings.MEDIA_ROOT
-    )
-
+# En desarrollo, Django sirve las imágenes subidas desde MEDIA_ROOT.
+# En producción se sirven desde S3 (ver settings.USAR_S3).
+if settings.DEBUG and not settings.USAR_S3:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
