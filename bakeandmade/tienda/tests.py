@@ -14,6 +14,7 @@ from .models import (
     PLAN_SWEET,
     CategoriaIngrediente,
     CupcakePersonalizado,
+    ExperienciaQR,
     Ingrediente,
     Menu,
     Pedido,
@@ -186,3 +187,22 @@ class PaginasPublicasTests(TestCase):
         for nombre in ('inicio', 'ver_carrito', 'suscripcion', 'login', 'registro'):
             with self.subTest(nombre=nombre):
                 self.assertEqual(self.client.get(reverse(nombre)).status_code, 200)
+
+
+class CamposVIPTests(TestCase):
+    """Valores por defecto de los campos que agrega la capa VIP (fase 1)."""
+
+    def test_pedido_sin_descuento_por_defecto(self) -> None:
+        usuario = User.objects.create_user('dani', password='clave-segura-123')
+        pedido = Pedido.objects.create(usuario=usuario, total=Decimal('10.00'), direccion_entrega='-')
+        self.assertEqual(pedido.descuento_porcentaje, Decimal('0'))
+        self.assertEqual(pedido.motivo_descuento, Pedido.SIN_DESCUENTO)
+
+    def test_experiencia_qr_genera_codigos_unicos(self) -> None:
+        usuario = User.objects.create_user('eva', password='clave-segura-123')
+        datos = {'usuario': usuario, 'video': 'videos/demo.mp4', 'fecha_expiracion': timezone.now()}
+        primera = ExperienciaQR.objects.create(**datos)
+        segunda = ExperienciaQR.objects.create(**datos)
+        self.assertGreaterEqual(len(primera.codigo_unico), 20)
+        self.assertNotEqual(primera.codigo_unico, segunda.codigo_unico)
+        self.assertIsNone(primera.detalle_pedido)

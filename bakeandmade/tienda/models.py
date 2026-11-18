@@ -9,6 +9,7 @@ QuerySets personalizados. Las vistas solo traducen HTTP ↔ estas operaciones.
 from __future__ import annotations
 
 import datetime
+import secrets
 import uuid
 from calendar import monthrange
 from collections.abc import Iterable, Mapping
@@ -147,12 +148,27 @@ class Suscripcion(models.Model):
 
 
 class RecordatorioEvento(models.Model):
-    """Fecha especial del cliente para recordarle pedir (aún sin implementar en vistas)."""
+    """Fecha especial del cliente, mostrada en el calendario de la página VIP.
+
+    `tipo` y `se_repite_cada_anio` permiten pintar cumpleaños y aniversarios
+    cada año sin que el usuario los vuelva a capturar.
+    """
+
+    CUMPLEANIOS = 'cumpleanios'
+    ANIVERSARIO = 'aniversario'
+    OTRO = 'otro'
+    TIPOS = [
+        (CUMPLEANIOS, 'Cumpleaños'),
+        (ANIVERSARIO, 'Aniversario'),
+        (OTRO, 'Otro'),
+    ]
 
     usuario = models.ForeignKey(User, on_delete=models.CASCADE)
     nombre_evento = models.CharField(max_length=100)
     fecha_evento = models.DateField()
     notificado = models.BooleanField(default=False)
+    tipo = models.CharField(max_length=20, choices=TIPOS, default=OTRO)
+    se_repite_cada_anio = models.BooleanField(default=False)
 
     def __str__(self) -> str:
         return f"{self.nombre_evento} ({self.fecha_evento})"
@@ -493,10 +509,29 @@ class Pedido(models.Model):
         ('enviado', 'Enviado'),
         ('entregado', 'Entregado'),
     ]
+    # Motivo del descuento cobrado; se guarda para auditar el precio de cada pedido.
+    SIN_DESCUENTO = ''
+    MOTIVO_VIP = 'vip'
+    MOTIVO_CUMPLEANIOS = 'cumpleanios'
+    MOTIVOS_DESCUENTO = [
+        (SIN_DESCUENTO, 'Sin descuento'),
+        (MOTIVO_VIP, 'VIP'),
+        (MOTIVO_CUMPLEANIOS, 'Cumpleaños'),
+    ]
+
     usuario = models.ForeignKey(User, on_delete=models.CASCADE)
     fecha_pedido = models.DateTimeField(auto_now_add=True)
     estado_pedido = models.CharField(max_length=20, choices=ESTADOS_PEDIDO, default=PENDIENTE)
     total = models.DecimalField(max_digits=10, decimal_places=2)
+    descuento_porcentaje = models.DecimalField(
+        max_digits=3,
+        decimal_places=2,
+        default=Decimal('0'),
+        help_text='Fracción descontada: 0.20 = 20 %.',
+    )
+    motivo_descuento = models.CharField(
+        max_length=20, choices=MOTIVOS_DESCUENTO, default=SIN_DESCUENTO, blank=True
+    )
     direccion_entrega = models.TextField()
     checkout_token = models.UUIDField(unique=True, null=True, blank=True, editable=False)
 
@@ -518,12 +553,30 @@ class DetallePedido(models.Model):
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
 
 
-class ExperienciaQR(models.Model):
-    """Mensaje o video asociado a una línea de pedido mediante un código QR (futuro)."""
+def generar_codigo_qr() -> str:
+    """Token aleatorio y no adivinable para la URL pública del QR (/vip/v/<codigo>/)."""
+    return secrets.token_urlsafe(16)
 
-    detalle_pedido = models.OneToOneField(DetallePedido, on_delete=models.CASCADE)
-    codigo_unico = models.CharField(max_length=100, unique=True)
-    url_video = models.CharField(max_length=255)
+
+class ExperienciaQR(models.Model):
+    """Video personal de un usuario VIP, que se abre al escanear su código QR.
+
+    El archivo vive en el almacenamiento por defecto (S3 en producción), porque
+    el disco de Render es efímero. `detalle_pedido` es opcional: el video es del
+    usuario, no de una línea de pedido.
+    """
+
+    usuario = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        null=True,  # Solo para filas previas a la capa VIP; el admin lo exige.
+        related_name='experiencias_qr',
+    )
+    detalle_pedido = models.OneToOneField(
+        DetallePedido, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    codigo_unico = models.CharField(max_length=100, unique=True, default=generar_codigo_qr)
+    video = models.FileField(upload_to='videos/', max_length=255)
     mensaje_texto = models.TextField(blank=True, null=True)
     fecha_expiracion = models.DateTimeField()
 

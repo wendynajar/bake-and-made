@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'tienda',
     'usuarios',
+    'iot',
 ]
 
 MIDDLEWARE = [

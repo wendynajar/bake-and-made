@@ -22,7 +22,8 @@ python manage.py test               # tests de tienda y usuarios
 ## Mapa del código
 - `bakeandmade/bakeandmade/settings.py`: toda la configuración se lee de variables de entorno (python-dotenv). WhiteNoise sirve los estáticos y S3 guarda las imágenes subidas (`/media`) si se define `AWS_STORAGE_BUCKET_NAME`.
 - `bakeandmade/bakeandmade/urls.py`: hace `include()` de `usuarios.urls` y `tienda.urls`.
-- `bakeandmade/usuarios/`: registro, login y logout (usa el `User` nativo, sin modelos propios).
+- `bakeandmade/usuarios/`: registro, login y logout con el `User` nativo; `PerfilVIP` (teléfono y cumpleaños, `PerfilVIP.de(usuario)`).
+- `bakeandmade/iot/`: `TarjetaRFID` (inventario, `.objects.libres()`, UID normalizado con `normalizar_uid`), `Terminal` y `LecturaRFID`. Comandos `crear_terminal <codigo>` y `registrar_tarjeta <uid>`.
 - `bakeandmade/tienda/models.py`: **lógica de negocio** en QuerySets y métodos de modelo:
   - `Suscripcion.objects.plan_de()`, `.vigente_para()`, `Suscripcion.contratar_mes()`, `.cancelar()`
   - `Ingrediente.objects.de_categoria().visibles_para(usuario)`

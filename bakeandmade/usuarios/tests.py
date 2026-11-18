@@ -1,8 +1,10 @@
-"""Pruebas del registro de usuarios."""
+"""Pruebas del registro de usuarios y del perfil VIP."""
 
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+
+from .models import PerfilVIP
 
 
 class RegistroTests(TestCase):
@@ -29,3 +31,15 @@ class RegistroTests(TestCase):
         respuesta = self.client.post(reverse('registro'), self.datos)
         self.assertEqual(respuesta.status_code, 200)
         self.assertFalse(User.objects.filter(username='eli').exists())
+
+
+class PerfilVIPTests(TestCase):
+    """El perfil VIP se crea de forma perezosa y es uno por usuario."""
+
+    def test_de_crea_el_perfil_una_sola_vez(self) -> None:
+        usuario = User.objects.create_user('ana', password='x-clave-segura-1')
+        primero = PerfilVIP.de(usuario)
+        segundo = PerfilVIP.de(usuario)
+        self.assertEqual(primero.pk, segundo.pk)
+        self.assertEqual(PerfilVIP.objects.count(), 1)
+        self.assertEqual(usuario.perfil_vip, primero)
