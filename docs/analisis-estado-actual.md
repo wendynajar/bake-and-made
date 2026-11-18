@@ -1,158 +1,221 @@
 # Análisis del estado actual — Bake & Made
 
-> Fecha del análisis: 2026-11-17 · Último commit analizado: `a400a83` ("Añadido planes de suscripción y personalización de cupcake")
+> Fecha del análisis: 2026-11-18 · Rama: `feat/render-allocation` · Último commit analizado: `03bea44` ("Preparar despliegue en Render y aplicar reglas de ARCHITECTURE.md")
 
 ## 1. Resumen
 
-Bake & Made es una tienda en línea de repostería (cupcakes, pasteles, galletas) hecha con **Django 6.1.1** y renderizado del lado del servidor (plantillas Django, sin frontend SPA). Hay una sola app de negocio, `tienda`, que incluye:
+Bake & Made es una tienda en línea de repostería (cupcakes, pasteles, galletas) hecha con **Django 6.1.1** y plantillas renderizadas en el servidor. **Está desplegada en Render** (Web Service con gunicorn y PostgreSQL administrado). El código está dividido en dos apps:
 
-- catálogo de productos con stock,
-- carrito guardado en la sesión,
-- registro, inicio y cierre de sesión,
-- checkout con control de inventario e idempotencia,
-- asistente de 4 pasos para armar un cupcake personalizado,
-- suscripción mensual "Sweet Plan" (el pago es simulado),
-- panel de administración de Django para gestionar todo.
+- `tienda`: catálogo con stock, carrito en la sesión, checkout con control de inventario e idempotencia, un asistente de 4 pasos para armar cupcakes personalizados y la suscripción mensual "Sweet Plan" (con pago simulado).
+- `usuarios`: registro, inicio y cierre de sesión con el `User` nativo de Django.
 
-El proyecto **funciona en local pero aún no está listo para producción**. Usa SQLite, tiene el `SECRET_KEY` escrito en el código, `DEBUG=True`, le falta `STATIC_ROOT` y no tiene servidor WSGI de producción. Las secciones 6 y 7 lo detallan.
+Ya se aplicaron las reglas de [ARCHITECTURE.md](ARCHITECTURE.md): configuración por variables de entorno, la lógica de negocio en modelos y QuerySets (fat models, skinny views), type hints y docstrings. Hay **18 tests y todos pasan**.
+
+Lo que falta de la visión de ARCHITECTURE.md:
+- toda la capa IoT: la app `iot`, el endpoint `/api/rfid/scan/`, el polling en JS y el ESP32;
+- una pasarela de pago real;
+- llevar los cupcakes personalizados hasta el checkout.
+
+### Fases de ARCHITECTURE.md
+
+| Fase | Estado |
+|---|---|
+| 1. Planteamiento | Modelos hechos. **Pendientes:** el contrato de la API RFID, el mapeo de pines del ESP32 y el registro de UIDs VIP |
+| 2. Construcción | Backend web y S3 hechos (S3 se activa por variable de entorno). **Pendientes:** la app `iot`, el polling en el frontend y el firmware del ESP32 |
+| 3. Pruebas | Hay tests unitarios del checkout, las suscripciones, los ingredientes y el registro. **Pendientes:** pruebas de integración del endpoint RFID y pruebas de hardware |
+| 4. Despliegue | Funciona en Render. **Pendientes:** CI/CD con GitHub Actions y la prueba de humo con RFID |
 
 ## 2. Herramientas y dependencias
 
 | Elemento | Valor | Fuente |
 |---|---|---|
-| Lenguaje | Python 3.13 | `Pipfile` (`python_version = "3.13"`) |
-| Framework | Django 6.1.1 | `Pipfile.lock` |
-| Imágenes | Pillow (requerido por `ImageField`) | `Pipfile` |
-| Otras (transitivas) | asgiref 3.12.1, sqlparse 0.6.0, tzdata | `Pipfile.lock` |
-| Gestor de dependencias | **Pipenv** (`Pipfile` + `Pipfile.lock`) | raíz del repo |
-| Base de datos | SQLite (`db.sqlite3`, ignorado en git) | `settings.py` |
-| Frontend | HTML de plantillas Django + CSS propio + `premium.js` (vanilla) + Google Fonts | `tienda/static`, `base.html` |
-| Correo | Backend de consola (`MAILERS`) | `settings.py` |
+| Lenguaje | Python 3.13 (Render: `PYTHON_VERSION=3.13.5`) | `Pipfile`, `render.yaml` |
+| Framework | Django 6.1.1 | `requirements.txt` / `Pipfile` |
+| Servidor WSGI | gunicorn ≥ 23 | `requirements.txt` |
+| Estáticos | WhiteNoise ≥ 6.8 (`STATIC_ROOT = staticfiles/`) | `settings.py` |
+| Base de datos | PostgreSQL en Render (`dj-database-url` + `psycopg[binary]`). En local es SQLite si `DATABASE_URL` está vacía | `settings.py` |
+| Imágenes subidas | `django-storages[s3]` si `AWS_STORAGE_BUCKET_NAME` está definida. Si no, el disco local, que es efímero en Render | `settings.py` |
+| Configuración | `python-dotenv` (lee `.env` en la raíz del repo) | `settings.py`, `.env.example` |
+| Imágenes (`ImageField`) | Pillow ≥ 11 | `requirements.txt` |
+| Gestor de dependencias | `requirements.txt` (lo usa Render) y Pipenv (desarrollo). Hoy están sincronizados | raíz del repo |
+| Frontend | Plantillas Django, CSS propio, `premium.js` (vanilla) y Google Fonts | `tienda/static`, `base.html` |
+| Correo | Backend de consola (`MAILERS`). **No envía correos reales** | `settings.py` |
 | Idioma / zona horaria | `es-mx` / `America/Mexico_City` | `settings.py` |
-| Tests | No hay (`tienda/tests.py` está vacío) | — |
-| CI/CD | No hay | — |
-
-**Faltan para producción:** `gunicorn`, `whitenoise`, `dj-database-url` y `psycopg` (driver de PostgreSQL). Tampoco hay `requirements.txt`.
+| Tests | `unittest` de Django: 16 en `tienda` y 2 en `usuarios` | `*/tests.py` |
+| CI/CD | Render hace el deploy desde GitHub. **No hay CI** que ejecute los tests | — |
 
 ## 3. Estructura del repositorio
 
 ```
-bake-and-made/                  ← raíz del repo git
-├── Pipfile / Pipfile.lock      ← dependencias (Pipenv)
-├── .gitignore
-├── .vscode/settings.json
-└── bakeandmade/                ← proyecto Django (aquí vive manage.py)
+bake-and-made/                    ← raíz del repo git
+├── CLAUDE.md                     ← guía rápida para agentes
+├── Pipfile / Pipfile.lock        ← dependencias de desarrollo
+├── requirements.txt              ← dependencias que instala Render
+├── build.sh                      ← Build Command de Render
+├── render.yaml                   ← Blueprint: Web Service + PostgreSQL
+├── .env.example                  ← plantilla de variables de entorno
+├── .gitattributes                ← obliga a LF en *.sh
+├── docs/                         ← ARCHITECTURE, este análisis y la guía de despliegue
+└── bakeandmade/                  ← proyecto Django (aquí está manage.py)
     ├── manage.py
-    ├── bakeandmade/            ← paquete de configuración
-    │   ├── settings.py
-    │   ├── urls.py             ← TODAS las rutas están aquí (la app no tiene urls.py)
-    │   ├── wsgi.py / asgi.py
-    ├── tienda/                 ← app de negocio
-    │   ├── models.py           ← 12 modelos
-    │   ├── views.py            ← ~1070 líneas, vistas basadas en funciones
-    │   ├── suscripciones.py    ← reglas de negocio del Sweet Plan
-    │   ├── context_processors.py ← contador del carrito + plan del usuario
-    │   ├── forms.py            ← RegistroUsuarioForm
-    │   ├── admin.py
-    │   ├── templatetags/wizard_filters.py ← filtro dict_get
-    │   ├── management/commands/cargar_catalogo.py ← datos iniciales (seed)
-    │   ├── migrations/ 0001–0005
-    │   ├── templates/tienda/*.html (12 plantillas)
-    │   └── static/tienda/*.css, premium.js
-    ├── catalogo.json           ← vacío ("[ ]")
-    ├── catalogo_respaldo.json  ← fixture con acentos dañados (cp1252)
-    ├── convertir.py            ← script suelto para convertir cp1252 → UTF-8
-    └── usuarios.json           ← vacío
+    ├── bakeandmade/
+    │   ├── settings.py           ← todo se lee de variables de entorno
+    │   ├── urls.py               ← admin + include(usuarios.urls) + include(tienda.urls)
+    │   └── wsgi.py / asgi.py
+    ├── usuarios/                 ← autenticación (sin modelos propios)
+    │   ├── forms.py              ← RegistroUsuarioForm (email único)
+    │   ├── views.py              ← registro
+    │   ├── urls.py               ← registro, login y logout
+    │   ├── templates/usuarios/   ← login.html, registro.html
+    │   └── tests.py
+    └── tienda/
+        ├── models.py             ← modelos, QuerySets y reglas de negocio (~550 líneas)
+        ├── views.py              ← vistas delgadas (~570 líneas)
+        ├── carrito.py            ← claves y lectura del carrito en la sesión
+        ├── context_processors.py ← contador del carrito y plan del usuario
+        ├── urls.py
+        ├── admin.py
+        ├── templatetags/wizard_filters.py  ← filtro dict_get
+        ├── management/commands/cargar_catalogo.py  ← datos iniciales (idempotente)
+        ├── migrations/ 0001–0005
+        ├── templates/tienda/     ← 9 plantillas
+        ├── static/tienda/        ← 5 CSS y premium.js
+        └── tests.py
 ```
+
+Ya no están los archivos sueltos de antes (`catalogo.json`, `catalogo_respaldo.json`, `convertir.py` y `usuarios.json`).
 
 ## 4. Arquitectura
 
-Es un **monolito Django clásico (MVT)**:
+Es un **monolito Django (MVT)** en Render:
 
 ```
-Navegador ──HTTP──▶ Django (urls.py → views.py)
-                        │
-                        ├── Sesión (django_session en BD): carrito, carrito_personalizados,
-                        │   pasos del asistente, checkout_token
-                        ├── ORM ──▶ SQLite (hoy) / PostgreSQL (objetivo)
-                        ├── Plantillas (templates/tienda) + context processor
-                        └── Archivos: /static (CSS/JS) y /media (imágenes subidas en el admin)
+Navegador ──HTTPS──▶ Render ──▶ gunicorn (WEB_CONCURRENCY procesos) ──▶ Django
+                                                                    │
+     urls.py → usuarios.urls / tienda.urls → views (delgadas) → models / QuerySets
+                                                                    │
+       ├── Sesión (django_session en BD): carrito, carrito_personalizados,
+       │   pasos del asistente, checkout_token, checkout_total
+       ├── ORM ──▶ PostgreSQL (Render) / SQLite (local)
+       ├── /static ──▶ WhiteNoise (desde el mismo proceso)
+       └── /media  ──▶ S3 (si hay bucket) / disco local efímero
 ```
 
-- **Estado del carrito:** se guarda solo en la sesión (`request.session`), que vive en la base de datos (backend de sesiones por defecto). No hay modelo `Carrito`.
-- **Autenticación:** usa el `User` nativo de Django. El login y el logout usan `LoginView` y `LogoutView` (el logout es por POST, como exige Django 5+).
-- **Lógica de negocio:** casi toda está en `views.py`. Solo las suscripciones están en un módulo aparte (`suscripciones.py`).
-- **Imágenes:** `Menu.imagen` e `Ingrediente.imagen` se guardan en `MEDIA_ROOT` (disco local). Solo se sirven si `DEBUG=True`.
+- **Build en Render (`build.sh`):** `pip install`, `collectstatic`, `migrate`, `cargar_catalogo` y, si se definen las variables `DJANGO_SUPERUSER_*`, la creación del superusuario.
+- **Carrito:** vive solo en la sesión. No hay modelo `Carrito`. `tienda/carrito.py` define `CLAVE_CARRITO` y `CLAVE_PERSONALIZADOS`.
+- **Autenticación:** `LoginView` y `LogoutView`. El logout es por POST.
+- **Lógica de negocio** (en `tienda/models.py`):
+  - `Suscripcion.objects.plan_de()`, `.vigente_para()`, `.activa_para()` y `.expirar_vencidas()`; `Suscripcion.contratar_mes()` y `.cancelar()`; `sumar_un_mes()`.
+  - `Ingrediente.objects.de_categoria().visibles_para(usuario)`: los ingredientes `solo_suscriptores` solo los ve quien tiene el Sweet Plan.
+  - `Menu.objects.en_venta()` y `Menu.admite_cantidad()`.
+  - `Pedido.objects.lineas_validas()`, `.total_de()` y `.crear_desde_carrito()`. Este último es atómico, descuenta stock con `F()` y usa un token único. Lanza `StockInsuficiente` o `PrecioCambiado`, que heredan de `ErrorPedido`.
+  - `CupcakePersonalizado.PASOS`, `.calcular_precio()` ($35 + extras), `.esta_completo()`, `.filtrar_dietas()`, `.DIETAS` y `.COLORES_FROSTING`.
 
 ### Modelo de datos
 
-| Módulo | Modelos | ¿Se usa en las vistas? |
+| Módulo | Modelos | ¿Se usa fuera del admin? |
 |---|---|---|
 | Catálogo | `CategoriaProducto`, `Menu`, `DetallesMenu` | `Menu` y `CategoriaProducto` sí. `DetallesMenu` solo en el admin |
-| Ingredientes | `CategoriaIngrediente`, `Ingrediente` | Sí (asistente de personalización) |
-| Pedidos | `Pedido`, `DetallePedido` | Sí (checkout) |
-| Personalización | `CupcakePersonalizado`, `CupcakeIngredientes` | **No.** Los cupcakes personalizados solo viven en la sesión |
+| Ingredientes | `CategoriaIngrediente`, `Ingrediente` | Sí (en el asistente de personalización) |
+| Pedidos | `Pedido`, `DetallePedido` | Sí (en el checkout) |
+| Personalización | `CupcakePersonalizado`, `CupcakeIngredientes` | La clase se usa para pasos y precios, pero **no se guardan filas**: los personalizados solo viven en la sesión |
 | Suscripciones | `Suscripcion` | Sí |
 | Futuro | `RecordatorioEvento`, `ExperienciaQR` | **No**, solo en el admin |
 
 ## 5. Funcionalidad actual (rutas)
 
-| Ruta | Vista | Qué hace |
+| Ruta | App / vista | Qué hace |
 |---|---|---|
-| `/` | `inicio` | Muestra el catálogo (productos disponibles con stock > 0) |
-| `/registro/` | `registro` | Registro con email único, inicia sesión automáticamente |
+| `/` | `tienda.inicio` | Catálogo: productos `en_venta()` (disponibles y con stock) |
+| `/registro/` | `usuarios.registro` | Registro con email único. Inicia sesión automáticamente |
 | `/login/`, `/logout/` | `LoginView` / `LogoutView` | Autenticación |
 | `/carrito/` | `ver_carrito` | Muestra productos normales y personalizados |
 | `/carrito/agregar/<id>/` | `agregar_carrito` | Suma 1 unidad sin pasar del stock |
 | `/carrito/actualizar/<id>/` | `actualizar_carrito` | Aumentar, disminuir o eliminar |
-| `/carrito/personalizado/<i>/actualizar|eliminar/` | — | Gestiona los cupcakes personalizados que están en la sesión |
-| `/checkout/` | `checkout` | Exige login. Usa token UUID (idempotencia), revisa precio y stock, descuenta stock con `F()` dentro de una transacción |
-| `/pedido-confirmado/<id>/` | `pedido_confirmado` | Confirmación (solo la ve el dueño del pedido) |
-| `/personalizar/`, `/personalizar/<paso>/` | `personalizar_cupcake` | Asistente base → relleno → cobertura (con color) → topping → resumen. Incluye dietas y bloquea saltarse pasos |
-| `/personalizar/agregar/` | `agregar_cupcake_personalizado` | El precio se recalcula en el servidor ($35 + extras) |
-| `/suscripcion/` (+ `confirmar/`, `cancelar/`) | — | Sweet Plan a $99 al mes, con pago **simulado**. Al cancelar se conserva el acceso hasta `fecha_fin` |
-| `/admin/` | Django admin | Gestión del catálogo, el stock, los pedidos y las suscripciones |
+| `/carrito/personalizado/<i>/actualizar/` y `/eliminar/` | — | Gestiona los cupcakes personalizados de la sesión |
+| `/checkout/` | `checkout` | Exige login. Token UUID (idempotencia), revisa precio y stock y crea el pedido con `crear_desde_carrito()`. **Solo procesa el carrito normal** |
+| `/pedido-confirmado/<id>/` | `pedido_confirmado` | Confirmación. Solo la ve el dueño del pedido |
+| `/personalizar/`, `/personalizar/<paso>/` | `personalizar_cupcake` | Asistente: base → relleno → cobertura (con color) → topping → resumen. Incluye filtro de dietas y no deja saltarse pasos |
+| `/personalizar/agregar/` | `agregar_cupcake_personalizado` | Recalcula el precio en el servidor y lo agrega a `carrito_personalizados` |
+| `/suscripcion/` (+ `confirmar/`, `cancelar/`) | — | Sweet Plan a $99 al mes con pago **simulado**. Al cancelar se conserva el acceso hasta `fecha_fin` |
+| `/admin/` | Django admin | Catálogo, stock, ingredientes, pedidos y suscripciones |
 
-Datos iniciales: `python manage.py cargar_catalogo` crea 13 productos, 5 categorías, 4 categorías de ingredientes y 15 ingredientes. Se puede ejecutar varias veces sin duplicar nada (usa `get_or_create`).
+Datos iniciales: `python manage.py cargar_catalogo` crea 13 productos, 5 categorías, 4 categorías de ingredientes y 15 ingredientes. Se puede ejecutar varias veces sin duplicar nada (`get_or_create`), y Render lo ejecuta en cada build.
 
-## 6. Hallazgos (bugs y deuda técnica)
+### Cobertura de tests (18, todos OK)
 
-> **Actualización 2026-11-17, después de aplicar docs/ARCHITECTURE.md:**
-> - Resueltos: #1 a #3, #5, #6, #10, #12 y #14 (configuración por variables de entorno, WhiteNoise, PostgreSQL, gunicorn, `requirements.txt` y `build.sh`, código muerto eliminado, archivos sueltos borrados, rutas por app).
-> - #4 queda resuelto si se configura `AWS_STORAGE_BUCKET_NAME` (django-storages con S3).
-> - #13: se agregaron tests en `tienda/tests.py` y `usuarios/tests.py`, pero **aún no se han ejecutado**.
-> - Pendientes: #7, #8, #9 y #11.
-> - La lógica de negocio se movió a `tienda/models.py` (QuerySets y métodos) y se creó la app `usuarios`. Las secciones 2 a 5 describen el estado **anterior** a este cambio; el mapa actual está en `CLAUDE.md`.
+| Clase | Qué prueba |
+|---|---|
+| `SumarUnMesTests` | Mes normal, fin de mes corto y cambio de año |
+| `SuscripcionTests` | Plan Basic por defecto, contratar, cancelada con acceso vigente y expiración |
+| `IngredientesVisiblesTests` | Los exclusivos se ocultan a Basic y se muestran a Sweet |
+| `PrecioCupcakeTests` | Precio base más extras |
+| `PedidoTests` | Crea el pedido y descuenta stock; rechaza si no hay stock o si cambió el precio |
+| `CheckoutVistaTests` | El pedido se registra y vacía el carrito; un token reutilizado no duplica el pedido |
+| `PaginasPublicasTests` | Inicio, carrito y suscripción responden |
+| `RegistroTests` (`usuarios`) | El registro inicia sesión; rechaza un correo duplicado |
 
-### Bloqueantes para producción
-1. **`SECRET_KEY` escrito en el código y subido a git.** Hay que sacarlo a una variable de entorno y **rotarlo**, porque ya es público en el historial.
-2. **`DEBUG = True` y `ALLOWED_HOSTS = []`**, ambos fijos en el código.
-3. **No existe `STATIC_ROOT`**, así que `collectstatic` falla. Tampoco hay WhiteNoise para servir los estáticos con gunicorn.
-4. **Las imágenes subidas (`/media`) no se sirven con `DEBUG=False`** (ver `urls.py`). Además, en Render el disco es **efímero**: lo que se sube por el admin se pierde en cada deploy o reinicio. Opciones: un Persistent Disk de Render (planes de pago) o almacenamiento externo (Cloudinary, S3 o R2 con `django-storages`).
-5. SQLite en lugar de PostgreSQL, y no está instalado `dj-database-url` ni `psycopg`.
-6. No hay `requirements.txt` ni `gunicorn`.
+## 6. Hallazgos
 
-### Bugs funcionales
-7. **El checkout ignora los cupcakes personalizados.** `checkout()` solo lee `session['carrito']`:
+### Resueltos (desde el análisis del 2026-11-17)
+
+| # | Hallazgo | Cómo se resolvió |
+|---|---|---|
+| 1 | `SECRET_KEY` escrito en el código | Ahora se lee de una variable de entorno. Render la genera. ⚠️ La clave vieja **sigue en el historial de git**: no debe reutilizarse |
+| 2 | `DEBUG` y `ALLOWED_HOSTS` fijos | Se leen de variables de entorno, y `RENDER_EXTERNAL_HOSTNAME` se agrega sola |
+| 3 | No existía `STATIC_ROOT` ni WhiteNoise | `STATIC_ROOT = staticfiles/` y WhiteNoise |
+| 4 | `/media` no persistía | Se usa S3 con django-storages **si se define** `AWS_STORAGE_BUCKET_NAME` |
+| 5 | SQLite en producción | PostgreSQL vía `DATABASE_URL` |
+| 6 | Faltaban `requirements.txt` y gunicorn | Se agregaron, junto con `build.sh` y `render.yaml` |
+| 10 | Código muerto e imports duplicados en `views.py` | Eliminados |
+| 12 | Archivos JSON y scripts sueltos | Borrados |
+| 13 | No había tests | 18 tests, todos OK (verificado el 2026-11-18) |
+| 14 | Todas las rutas en el `urls.py` del proyecto | `tienda/urls.py` y `usuarios/urls.py` con `include()` |
+
+### Pendientes
+
+**Bugs funcionales**
+7. **El checkout ignora los cupcakes personalizados.** `checkout()` solo lee `obtener_carrito()` (`views.py:247`):
    - si el carrito solo tiene personalizados, responde "Tu carrito está vacío";
-   - si tiene ambos tipos, el total del carrito (que sí incluye los personalizados) **no coincide** con el del checkout, y los personalizados se quedan en la sesión después de comprar;
-   - los modelos `CupcakePersonalizado` y `CupcakeIngredientes` nunca se escriben. Tampoco `DetallePedido.cupcake_custom`.
-8. No se descuenta el stock de los ingredientes (`Ingrediente.stock_disponible`) al vender un personalizado.
-9. `cargar_catalogo` crea todos los ingredientes con `solo_suscriptores=False`, así que el Sweet Plan no da acceso a nada exclusivo hasta que alguien lo configure en el admin.
+   - si tiene ambos tipos, el total del carrito no coincide con el del checkout, y los personalizados se quedan en la sesión después de comprar;
+   - nunca se escriben `CupcakePersonalizado`, `CupcakeIngredientes` ni `DetallePedido.cupcake_custom`.
+8. Al vender un personalizado no se descuenta `Ingrediente.stock_disponible`.
+9. `cargar_catalogo` crea todos los ingredientes con `solo_suscriptores=False` (`cargar_catalogo.py:118`). El filtro ya funciona (`visibles_para`), pero el Sweet Plan no da nada exclusivo hasta que se marque algún ingrediente en el admin.
 
-### Calidad de código
-10. Código muerto en `views.py`: `iniciar_sesion`, `cerrar_sesion`, `personalizar` y `obtener_cantidad_carrito` (este último duplica el context processor). También hay imports repetidos (`login_required`, `require_POST`).
-11. `suscripcion_vigente()` lanza un `UPDATE` en **cada request** porque se llama desde el context processor. Funciona, pero conviene moverlo a una tarea programada (cron job) o hacerlo de forma perezosa.
-12. Archivos sueltos sin uso: `catalogo.json` (vacío), `catalogo_respaldo.json` (codificación dañada), `convertir.py` y `usuarios.json`. Se recomienda borrarlos o moverlos a `fixtures/`.
-13. No hay tests. Lo más sensible y que debería probarse primero es el checkout (inventario y token) y las suscripciones.
-14. Todas las rutas están en el `urls.py` del proyecto. Conviene pasarlas a `tienda/urls.py` con `include()`.
+**Producción y configuración**
+15. `check --deploy` falla con **`mail.E001`**: `MAILERS` usa el backend de consola. No afecta mientras nada envíe correos, pero `RecordatorioEvento` va a necesitar SMTP o un proveedor configurado por variables de entorno.
+16. `SECURE_HSTS_SECONDS` vale `0` por defecto (aviso `security.W004`). Hay que subirlo cuando se confirme HTTPS estable.
+17. `render.yaml` usa `plan: free` en PostgreSQL. La base gratuita de Render **expira a los 30 días**.
+18. **Rama de despliegue.** Render despliega `feat/render-allocation`, pero `docs/despliegue-render.md` todavía dice `main`. Se corrige en la fase 9 de `IOT_VIP_SPEC.md`.
+19. Si no se definió `AWS_STORAGE_BUCKET_NAME` en Render, las imágenes subidas desde el admin se pierden en cada deploy.
+20. No hay CI: nadie ejecuta `python manage.py test` ni `check --deploy` antes de cada deploy.
 
-## 7. Próximos pasos sugeridos (hoja de ruta)
+**Calidad de código**
+11. `Suscripcion.objects.plan_de()` lanza un `UPDATE` (`expirar_vencidas`) en cada petición de un usuario autenticado, porque lo llama el context processor. Ya está documentado en el docstring. A futuro, moverlo a un cron job.
 
-1. **Preparar el despliegue** (ver [despliegue-render.md](despliegue-render.md)): configuración por variables de entorno, PostgreSQL, WhiteNoise, gunicorn, `requirements.txt` y `build.sh`.
-2. **Almacenamiento de imágenes** externo (Cloudinary o S3) para `/media`.
-3. **Llevar los cupcakes personalizados hasta el checkout**: crear `CupcakePersonalizado` + `DetallePedido.cupcake_custom` y validar en el servidor las selecciones de ingredientes.
-4. **Pasarela de pago** (Stripe o Mercado Pago) para los pedidos y el Sweet Plan. Está marcado como `TODO` en `confirmar_suscripcion`.
-5. Implementar `RecordatorioEvento` (requiere un backend de correo real y un cron job de Render) y `ExperienciaQR`.
-6. Historial de pedidos del cliente ("Mis pedidos") y seguimiento del estado.
-7. Tests y CI (GitHub Actions: `python manage.py test` + `check --deploy`).
+**Funcionalidad sin implementar**
+- Pasarela de pago para los pedidos y el Sweet Plan (`TODO` en `Suscripcion.contratar_mes`, `models.py:131`).
+- `RecordatorioEvento` y `ExperienciaQR`: los modelos existen, pero no hay flujo.
+- Historial de pedidos del cliente ("Mis pedidos") y seguimiento del estado.
+- Capa IoT de ARCHITECTURE.md: la app `iot`, `/api/rfid/scan/` con token estático, las sesiones VIP, el polling en JS y el firmware del ESP32. **Capa IoT/VIP decidida: seguir [`docs/IOT_VIP_SPEC.md`](IOT_VIP_SPEC.md)**, que se implementa por fases en la rama `feat/iot-vip`.
+
+## 7. Milestones
+
+El siguiente trabajo es la **capa VIP/RFID**, definida en [`docs/IOT_VIP_SPEC.md`](IOT_VIP_SPEC.md) y dividida en fases (un commit por fase, con los tests en verde). Se trabaja en `feat/iot-vip` y se fusiona a `feat/render-allocation`, que es la rama que despliega Render.
+
+| Fase | Contenido | Hallazgos que resuelve |
+|---|---|---|
+| 0 | Rama `feat/iot-vip` y especificación en `docs/` | — |
+| 1 | Modelos: app `iot`, `PerfilVIP`, campos nuevos, admin | — |
+| 2 | Entrega simulada de tarjeta, usuarios demo, ingredientes exclusivos | #9 |
+| 3 | Descuentos VIP (20 %) y de cumpleaños (50 %) | — |
+| 4 | API IoT, inicio de sesión por tarjeta, `/healthz` | — |
+| 5 | Tienda con descuento y polling del kiosco (2 s) | #11 (en parte: un solo cálculo del plan por petición) |
+| 6 | Checkout de cupcakes personalizados | #7, #8 |
+| 7 | Checkout con descuento | — |
+| 8 | Página `/vip/`: cumpleaños, calendario, QR con video en S3 | — |
+| 9 | Despliegue en Render | #16, #18, #19 |
+| 10 | Firmware ESP32 + RC522 | — |
+| 11 | Prueba de humo | — |
+
+**Fuera de alcance por ahora:** pasarela de pago real, CI (#20), backend de correo (#15), "Mis pedidos" y uso del kiosco en celular.

@@ -6,6 +6,7 @@
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): visión, decisiones de diseño y reglas de código. **Manda sobre todo lo demás.**
 - [docs/analisis-estado-actual.md](docs/analisis-estado-actual.md): arquitectura, modelos, rutas, hallazgos y hoja de ruta.
 - [docs/despliegue-render.md](docs/despliegue-render.md): Web Service + PostgreSQL, build y start command, variables de entorno.
+- [docs/IOT_VIP_SPEC.md](docs/IOT_VIP_SPEC.md): especificación de la capa VIP/RFID (modelos, descuentos, API, kiosco, firmware y fases).
 
 ## Comandos
 ```bash
@@ -43,4 +44,4 @@ python manage.py test               # tests de tienda y usuarios
 - El checkout **no** procesa `carrito_personalizados` todavía (hallazgo #7 en el análisis).
 - Los nombres de URL no tienen namespace porque las plantillas usan `{% url 'inicio' %}`. Mantenlos así o actualiza todas las plantillas.
 - Si cambias dependencias, actualiza **a la vez** `requirements.txt` (lo usa Render) y `Pipfile` (desarrollo).
-- La integración con ESP32/RFID (`/api/rfid/scan/`, app `iot`) todavía no está decidida. No la implementes sin indicación.
+- Capa IoT/VIP decidida: seguir [docs/IOT_VIP_SPEC.md](docs/IOT_VIP_SPEC.md). Se implementa **una fase a la vez** en la rama `feat/iot-vip`; cada fase termina con `python manage.py test` en verde y un commit. No avances a la siguiente fase sin indicación.
