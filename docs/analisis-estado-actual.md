@@ -180,7 +180,7 @@ Datos iniciales: `python manage.py cargar_catalogo` crea 13 productos, 5 categor
    - si tiene ambos tipos, el total del carrito no coincide con el del checkout, y los personalizados se quedan en la sesión después de comprar;
    - nunca se escriben `CupcakePersonalizado`, `CupcakeIngredientes` ni `DetallePedido.cupcake_custom`.
 8. Al vender un personalizado no se descuenta `Ingrediente.stock_disponible`.
-9. `cargar_catalogo` crea todos los ingredientes con `solo_suscriptores=False` (`cargar_catalogo.py:118`). El filtro ya funciona (`visibles_para`), pero el Sweet Plan no da nada exclusivo hasta que se marque algún ingrediente en el admin.
+9. ~~`cargar_catalogo` crea todos los ingredientes con `solo_suscriptores=False`.~~ **Resuelto en la fase 2 de la capa VIP:** Red velvet, Dulce de leche, Queso crema y Fresas son exclusivos del Sweet Plan (en `cargar_catalogo` y con la migración `tienda.0007` para bases existentes).
 
 **Producción y configuración**
 15. `check --deploy` falla con **`mail.E001`**: `MAILERS` usa el backend de consola. No afecta mientras nada envíe correos, pero `RecordatorioEvento` va a necesitar SMTP o un proveedor configurado por variables de entorno.

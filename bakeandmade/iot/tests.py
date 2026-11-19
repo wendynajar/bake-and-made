@@ -1,4 +1,4 @@
-"""Pruebas de los modelos y comandos de la app iot (fase 1 de docs/IOT_VIP_SPEC.md)."""
+"""Pruebas de los modelos y comandos de la app iot (fases 1 y 2 de docs/IOT_VIP_SPEC.md)."""
 
 from io import StringIO
 
@@ -8,6 +8,8 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import IntegrityError
 from django.test import TestCase
+
+from tienda.models import PLAN_SWEET, Suscripcion
 
 from .models import TarjetaRFID, Terminal, normalizar_uid
 
@@ -81,3 +83,46 @@ class ComandosIotTests(TestCase):
         with self.assertRaises(CommandError):
             self.ejecutar('registrar_tarjeta', 'XYZ')
         self.assertFalse(TarjetaRFID.objects.exists())
+
+
+class EntregaTarjetaTests(TestCase):
+    """Entrega simulada de la tarjeta al contratar el Sweet Plan."""
+
+    def setUp(self) -> None:
+        self.usuario = User.objects.create_user('ana', password='x')
+
+    def test_contratar_asigna_la_primera_tarjeta_libre(self) -> None:
+        primera = TarjetaRFID.objects.create(uid='00000001')
+        TarjetaRFID.objects.create(uid='00000002')
+
+        Suscripcion.contratar_mes(self.usuario)
+
+        primera.refresh_from_db()
+        self.assertEqual(primera.usuario, self.usuario)
+        self.assertIsNotNone(primera.entregada_en)
+        self.assertEqual(TarjetaRFID.objects.libres().count(), 1)
+
+    def test_renovar_no_asigna_otra_tarjeta(self) -> None:
+        TarjetaRFID.objects.create(uid='00000001')
+        TarjetaRFID.objects.create(uid='00000002')
+
+        Suscripcion.contratar_mes(self.usuario)
+        Suscripcion.contratar_mes(self.usuario)
+
+        self.assertEqual(TarjetaRFID.objects.filter(usuario=self.usuario).count(), 1)
+        self.assertEqual(TarjetaRFID.objects.libres().count(), 1)
+
+    def test_sin_tarjetas_libres_la_suscripcion_sigue(self) -> None:
+        Suscripcion.contratar_mes(self.usuario)
+
+        self.assertEqual(Suscripcion.objects.plan_de(self.usuario), PLAN_SWEET)
+        self.assertFalse(TarjetaRFID.objects.filter(usuario=self.usuario).exists())
+
+    def test_tarjeta_inactiva_no_se_reemplaza_sola(self) -> None:
+        TarjetaRFID.objects.create(uid='00000001', usuario=self.usuario, activa=False)
+        TarjetaRFID.objects.create(uid='00000002')
+
+        tarjeta = TarjetaRFID.objects.entregar_a(self.usuario)
+
+        self.assertEqual(tarjeta.uid, '00000001')
+        self.assertEqual(TarjetaRFID.objects.libres().count(), 1)

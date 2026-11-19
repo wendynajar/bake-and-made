@@ -3,8 +3,10 @@
 import datetime
 import uuid
 from decimal import Decimal
+from io import StringIO
 
 from django.contrib.auth.models import User
+from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -206,3 +208,33 @@ class CamposVIPTests(TestCase):
         self.assertGreaterEqual(len(primera.codigo_unico), 20)
         self.assertNotEqual(primera.codigo_unico, segunda.codigo_unico)
         self.assertIsNone(primera.detalle_pedido)
+
+
+class IngredientesExclusivosTests(TestCase):
+    """`cargar_catalogo` deja un ingrediente premium por categoría solo para Sweet (#9)."""
+
+    def test_cargar_catalogo_marca_los_exclusivos(self) -> None:
+        call_command('cargar_catalogo', stdout=StringIO())
+
+        exclusivos = set(
+            Ingrediente.objects.filter(solo_suscriptores=True)
+            .values_list('categoria__nombre', 'nombre')
+        )
+        self.assertEqual(exclusivos, {
+            ('Base', 'Red velvet'),
+            ('Relleno', 'Dulce de leche'),
+            ('Cobertura', 'Queso crema'),
+            ('Topping', 'Fresas'),
+        })
+        self.assertEqual(Ingrediente.objects.filter(solo_suscriptores=False).count(), 11)
+
+    def test_basic_no_ve_los_exclusivos_y_sweet_si(self) -> None:
+        call_command('cargar_catalogo', stdout=StringIO())
+        usuario = User.objects.create_user('fer', password='clave-segura-123')
+
+        bases_basic = set(Ingrediente.objects.de_categoria('Base').visibles_para(usuario).values_list('nombre', flat=True))
+        Suscripcion.contratar_mes(usuario)
+        bases_sweet = set(Ingrediente.objects.de_categoria('Base').visibles_para(usuario).values_list('nombre', flat=True))
+
+        self.assertNotIn('Red velvet', bases_basic)
+        self.assertIn('Red velvet', bases_sweet)

@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from django.apps import apps
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import AnonymousUser, User
 from django.db import models, transaction
@@ -127,19 +128,29 @@ class Suscripcion(models.Model):
 
     @classmethod
     def contratar_mes(cls, usuario: User) -> Suscripcion:
-        """Crea una suscripción Sweet de un mes a partir de hoy.
+        """Crea una suscripción Sweet de un mes a partir de hoy y entrega la tarjeta VIP.
+
+        La entrega de la tarjeta es simulada (docs/IOT_VIP_SPEC.md): se asigna la
+        primera tarjeta libre del inventario, o ninguna si no quedan ("en camino").
+        Una renovación no entrega otra tarjeta. Todo ocurre en una transacción para
+        que no quede una suscripción sin su intento de entrega.
 
         TODO: integrar la pasarela de pago antes de crear la suscripción real.
         Hoy la confirmación es simulada y no guarda datos bancarios.
         """
+        # get_model evita importar iot desde tienda (y el import circular).
+        TarjetaRFID = apps.get_model('iot', 'TarjetaRFID')
         inicio = timezone.localdate()
-        return cls.objects.create(
-            usuario=usuario,
-            estado=cls.ACTIVA,
-            fecha_inicio=inicio,
-            fecha_fin=sumar_un_mes(inicio),
-            monto_mensual=PRECIO_SWEET_PLAN,
-        )
+        with transaction.atomic():
+            suscripcion = cls.objects.create(
+                usuario=usuario,
+                estado=cls.ACTIVA,
+                fecha_inicio=inicio,
+                fecha_fin=sumar_un_mes(inicio),
+                monto_mensual=PRECIO_SWEET_PLAN,
+            )
+            TarjetaRFID.objects.entregar_a(usuario)
+        return suscripcion
 
     def cancelar(self) -> None:
         """Cancela la renovación; el acceso se conserva hasta fecha_fin."""

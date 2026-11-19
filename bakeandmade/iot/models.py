@@ -12,8 +12,10 @@ import re
 from typing import Any
 
 from django.conf import settings
+from django.contrib.auth.base_user import AbstractBaseUser
 from django.core.validators import RegexValidator
-from django.db import models
+from django.db import models, transaction
+from django.utils import timezone
 
 _SEPARADORES_UID = re.compile(r'[\s:\-]')
 
@@ -41,6 +43,28 @@ class TarjetaQuerySet(models.QuerySet['TarjetaRFID']):
     def libres(self) -> TarjetaQuerySet:
         """Tarjetas activas sin dueño, en orden de alta: las disponibles para entregar."""
         return self.filter(activa=True, usuario__isnull=True).order_by('pk')
+
+    def entregar_a(self, usuario: AbstractBaseUser) -> TarjetaRFID | None:
+        """Entrega simulada: asigna al usuario la primera tarjeta libre del inventario.
+
+        Si el usuario ya tiene tarjeta (aunque esté inactiva), se devuelve esa y no
+        se asigna otra: las renovaciones del Sweet Plan no entregan tarjetas nuevas.
+        Devuelve None si no quedan tarjetas libres ("tu tarjeta está en camino").
+        `select_for_update(skip_locked=True)` evita que dos compras simultáneas
+        reciban la misma tarjeta en PostgreSQL.
+        """
+        existente = self.filter(usuario=usuario).first()
+        if existente is not None:
+            return existente
+
+        with transaction.atomic():
+            tarjeta = self.libres().select_for_update(skip_locked=True).first()
+            if tarjeta is None:
+                return None
+            tarjeta.usuario = usuario
+            tarjeta.entregada_en = timezone.now()
+            tarjeta.save(update_fields=['usuario', 'entregada_en'])
+            return tarjeta
 
 
 class TarjetaRFID(models.Model):
