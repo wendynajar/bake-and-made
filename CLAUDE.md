@@ -33,7 +33,7 @@ python manage.py test               # tests de tienda y usuarios
   - `Ingrediente.objects.de_categoria().visibles_para(usuario)`
   - `descuento_para(usuario, hoy)` y `aplicar_descuento(precio, descuento)`: todo precio con descuento VIP pasa por aquí (Decimal, redondeo por línea)
   - `Menu.objects.en_venta()`, `Menu.admite_cantidad()`
-  - `Pedido.objects.lineas_validas()`, `.personalizados_validos()`, `.crear_desde_carrito()` (atómico, con `F()` y token único; guarda `CupcakePersonalizado` + `CupcakeIngredientes` y descuenta el stock de productos e ingredientes)
+  - `Pedido.objects.lineas_validas()`, `.personalizados_validos()`, `.total_de(lineas, descuento)`, `.crear_desde_carrito()` (atómico, con `F()` y token único; guarda `CupcakePersonalizado` + `CupcakeIngredientes`, descuenta el stock de productos e ingredientes y registra `descuento_porcentaje`/`motivo_descuento` con `DetallePedido.precio_unitario` ya descontado)
   - `CupcakePersonalizado.PASOS`, `.calcular_precio()`, `.DIETAS`, `.COLORES_FROSTING`
 - `bakeandmade/tienda/carrito.py`: claves y lectura del carrito en la sesión.
 - `bakeandmade/tienda/peticion.py`: `plan_de_peticion()` y `descuento_de_peticion()` calculan plan y descuento **una vez por petición**; vistas y context processors deben usarlas en vez de llamar a `plan_de()` directo.

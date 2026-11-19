@@ -291,14 +291,21 @@ def checkout(request: HttpRequest) -> HttpResponse:
         messages.error(request, str(error))
         return redirect('ver_carrito')
 
-    total = Pedido.objects.total_de(lineas)
+    # El descuento se recalcula en cada petición: si cambia entre el GET y el POST
+    # (medianoche de un cumpleaños, Sweet vencido), el total ya no coincide y se
+    # pide revisar el pedido en vez de cobrar otro importe.
+    descuento, motivo = descuento_de_peticion(request)
+    subtotal = Pedido.objects.total_de(lineas)
+    total = Pedido.objects.total_de(lineas, descuento)
 
     if request.method == 'GET':
         request.session['checkout_token'] = str(uuid.uuid4())
         request.session['checkout_total'] = str(total)
 
     contexto = {
-        'productos_carrito': [linea.as_dict() for linea in lineas],
+        'productos_carrito': [linea.as_dict(descuento) for linea in lineas],
+        'subtotal': subtotal,
+        'ahorro': subtotal - total,
         'total': total,
         'checkout_token': request.session.get('checkout_token'),
     }
@@ -331,6 +338,8 @@ def checkout(request: HttpRequest) -> HttpResponse:
             checkout_token=token_sesion,
             total_esperado=total,
             personalizados=personalizados,
+            descuento=descuento,
+            motivo=motivo,
         )
     except IntegrityError:
         messages.error(

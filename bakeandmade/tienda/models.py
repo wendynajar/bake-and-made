@@ -443,17 +443,29 @@ class LineaCarrito:
     cantidad: int
 
     @property
-    def subtotal(self) -> Decimal:
-        """Precio del producto por la cantidad."""
-        return self.producto.precio_base * self.cantidad
+    def precio_unitario(self) -> Decimal:
+        """Precio base del producto, sin descuento."""
+        return self.producto.precio_base
 
-    def as_dict(self) -> dict[str, Any]:
-        """Representación para las plantillas existentes."""
+    @property
+    def subtotal(self) -> Decimal:
+        """Precio del producto por la cantidad, sin descuento."""
+        return self.precio_unitario * self.cantidad
+
+    def subtotal_con_descuento(self, descuento: Decimal) -> Decimal:
+        """Subtotal cobrado: precio unitario redondeado con descuento por la cantidad."""
+        return aplicar_descuento(self.precio_unitario, descuento) * self.cantidad
+
+    def as_dict(self, descuento: Decimal = Decimal('0')) -> dict[str, Any]:
+        """Representación para las plantillas, con precio base y precio final."""
         return {
             'tipo': 'normal',
             'producto': self.producto,
             'cantidad': self.cantidad,
-            'subtotal': self.subtotal,
+            'precio_base': self.precio_unitario,
+            'precio_unitario': aplicar_descuento(self.precio_unitario, descuento),
+            'subtotal_base': self.subtotal,
+            'subtotal': self.subtotal_con_descuento(descuento),
         }
 
 
@@ -478,11 +490,15 @@ class LineaPersonalizada:
 
     @property
     def subtotal(self) -> Decimal:
-        """Precio unitario por la cantidad."""
+        """Precio unitario por la cantidad, sin descuento."""
         return self.precio_unitario * self.cantidad
 
-    def as_dict(self) -> dict[str, Any]:
-        """Representación para las plantillas del carrito y del checkout."""
+    def subtotal_con_descuento(self, descuento: Decimal) -> Decimal:
+        """Subtotal cobrado: precio unitario redondeado con descuento por la cantidad."""
+        return aplicar_descuento(self.precio_unitario, descuento) * self.cantidad
+
+    def as_dict(self, descuento: Decimal = Decimal('0')) -> dict[str, Any]:
+        """Representación para las plantillas, con precio base y precio final."""
         return {
             'tipo': 'personalizado',
             'nombre': self.nombre,
@@ -491,8 +507,10 @@ class LineaPersonalizada:
                 for paso, ingrediente in self.ingredientes
             ],
             'cantidad': self.cantidad,
-            'precio_unitario': self.precio_unitario,
-            'subtotal': self.subtotal,
+            'precio_base': self.precio_unitario,
+            'precio_unitario': aplicar_descuento(self.precio_unitario, descuento),
+            'subtotal_base': self.subtotal,
+            'subtotal': self.subtotal_con_descuento(descuento),
         }
 
 
@@ -604,9 +622,13 @@ class PedidoQuerySet(models.QuerySet['Pedido']):
         return lineas
 
     @staticmethod
-    def total_de(lineas: Iterable[LineaPedido]) -> Decimal:
-        """Suma de subtotales (productos del catálogo y cupcakes personalizados)."""
-        return sum((linea.subtotal for linea in lineas), Decimal('0.00'))
+    def total_de(lineas: Iterable[LineaPedido], descuento: Decimal = Decimal('0')) -> Decimal:
+        """Total a cobrar: suma de subtotales con descuento (productos y personalizados).
+
+        Se redondea por línea y luego se suma, para que el total coincida con la
+        suma de los `DetallePedido.precio_unitario` guardados.
+        """
+        return sum((linea.subtotal_con_descuento(descuento) for linea in lineas), Decimal('0.00'))
 
     def crear_desde_carrito(
         self,
@@ -617,8 +639,14 @@ class PedidoQuerySet(models.QuerySet['Pedido']):
         checkout_token: uuid.UUID | str,
         total_esperado: Decimal,
         personalizados: Iterable[Any] = (),
+        descuento: Decimal = Decimal('0'),
+        motivo: str = '',
     ) -> Pedido:
         """Registra el pedido y descuenta el stock de forma atómica.
+
+        `descuento` y `motivo` vienen de `descuento_para()` (nunca del navegador):
+        cada `DetallePedido.precio_unitario` guarda el precio ya descontado y el
+        pedido guarda el porcentaje y el motivo para auditar lo cobrado.
 
         Por qué así:
         - Se recalcula el total dentro de la transacción y se rechaza si difiere
@@ -631,18 +659,25 @@ class PedidoQuerySet(models.QuerySet['Pedido']):
         - Cada cupcake personalizado se guarda como `CupcakePersonalizado` con sus
           `CupcakeIngredientes`, y su línea apunta a él (`cupcake_custom`).
         """
+        if not Decimal('0') <= descuento < Decimal('1'):
+            raise ValueError(f'Descuento fuera de rango: {descuento}')
+        if motivo not in dict(Pedido.MOTIVOS_DESCUENTO) or (descuento > 0) != bool(motivo):
+            raise ValueError(f'Motivo de descuento inválido: {motivo!r}')
+
         with transaction.atomic():
             lineas = self.lineas_validas(carrito)
             personalizadas = self.personalizados_validos(personalizados, usuario)
             if not lineas and not personalizadas:
                 raise ErrorPedido('Tu carrito está vacío.')
-            total = self.total_de([*lineas, *personalizadas])
+            total = self.total_de([*lineas, *personalizadas], descuento)
             if total != total_esperado:
                 raise PrecioCambiado('Los precios cambiaron. Revisa nuevamente tu pedido.')
 
             pedido = self.create(
                 usuario=usuario,
                 total=total,
+                descuento_porcentaje=descuento,
+                motivo_descuento=motivo,
                 direccion_entrega=direccion,
                 estado_pedido=Pedido.PENDIENTE,
                 checkout_token=checkout_token,
@@ -665,7 +700,7 @@ class PedidoQuerySet(models.QuerySet['Pedido']):
                     pedido=pedido,
                     menu_item=linea.producto,
                     cantidad=linea.cantidad,
-                    precio_unitario=linea.producto.precio_base,
+                    precio_unitario=aplicar_descuento(linea.precio_unitario, descuento),
                 )
 
             self._descontar_ingredientes(personalizadas)
@@ -685,7 +720,7 @@ class PedidoQuerySet(models.QuerySet['Pedido']):
                     pedido=pedido,
                     cupcake_custom=cupcake,
                     cantidad=linea.cantidad,
-                    precio_unitario=linea.precio_unitario,
+                    precio_unitario=aplicar_descuento(linea.precio_unitario, descuento),
                 )
         return pedido
 

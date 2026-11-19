@@ -196,7 +196,10 @@
                             <small>Cantidad: {{ item.cantidad }}</small>
                         </div>
 
-                        <strong>${{ item.subtotal }}</strong>
+                        <strong>
+                            {% if ahorro > 0 %}<del aria-label="Precio normal">${{ item.subtotal_base|floatformat:2 }}</del>{% endif %}
+                            ${{ item.subtotal|floatformat:2 }}
+                        </strong>
 
                     </div>
                 {% endfor %}
@@ -205,8 +208,18 @@
 
                 <div class="checkout-total-row">
                     <span>Subtotal</span>
-                    <strong>${{ total }} MXN</strong>
+                    <strong>${{ subtotal|floatformat:2 }} MXN</strong>
                 </div>
+
+                {% if ahorro > 0 %}
+                    <div class="checkout-total-row checkout-total-row-vip">
+                        <span>
+                            {% if vip_es_cumpleanios %}Cumpleaños{% else %}Descuento VIP{% endif %}
+                            −{{ vip_porcentaje }} %
+                        </span>
+                        <strong>−${{ ahorro|floatformat:2 }} MXN</strong>
+                    </div>
+                {% endif %}
 
                 <div class="checkout-total-row">
                     <span>Entrega</span>
@@ -217,7 +230,7 @@
 
                 <div class="checkout-grand-total">
                     <span>Total de productos</span>
-                    <strong>${{ total }} MXN</strong>
+                    <strong>${{ total|floatformat:2 }} MXN</strong>
                 </div>
 
                 <p class="checkout-summary-note">

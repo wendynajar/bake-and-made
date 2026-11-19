@@ -1215,7 +1215,9 @@
 }
 
 .summary-row-vip,
-.summary-row-vip strong {
+.summary-row-vip strong,
+.checkout-total-row-vip,
+.checkout-total-row-vip strong {
     color: var(--rose);
 }
 

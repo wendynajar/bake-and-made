@@ -190,8 +190,8 @@ class CheckoutVistaTests(TestCase):
         self.assertEqual(Pedido.objects.count(), 1)
 
 
-class CheckoutPersonalizadosTests(TestCase):
-    """Checkout de cupcakes personalizados (hallazgos #7 y #8, fase 6)."""
+class CarritoConCupcakesMixin:
+    """Usuario con sesión, un Brownie de $45 e ingredientes que suman un cupcake de $49."""
 
     def setUp(self) -> None:
         self.usuario = User.objects.create_user('dani', password='clave-segura-123')
@@ -242,6 +242,10 @@ class CheckoutPersonalizadosTests(TestCase):
 
     def stock(self, slug: str) -> int:
         return Ingrediente.objects.get(pk=self.ingredientes[slug].pk).stock_disponible
+
+
+class CheckoutPersonalizadosTests(CarritoConCupcakesMixin, TestCase):
+    """Checkout de cupcakes personalizados (hallazgos #7 y #8, fase 6)."""
 
     def test_solo_personalizados_crea_el_pedido(self) -> None:
         self.con_carrito([self.cupcake(cantidad=2)])
@@ -347,6 +351,123 @@ class CheckoutPersonalizadosTests(TestCase):
                 usuario=self.usuario, carrito={}, direccion='x',
                 checkout_token=uuid.uuid4(), total_esperado=Decimal('0'), personalizados=[],
             )
+
+
+class CheckoutVIPTests(CarritoConCupcakesMixin, TestCase):
+    """Checkout con el descuento VIP (fase 7): se cobra y se guarda lo descontado."""
+
+    def hacer_sweet(self) -> None:
+        Suscripcion.contratar_mes(self.usuario)
+
+    def test_sweet_guarda_descuento_y_precios_descontados(self) -> None:
+        self.hacer_sweet()
+        # Brownie $45 x2 -> $36 c/u; cupcake $49 -> $39.20
+        self.con_carrito([self.cupcake()], productos=2)
+
+        self.comprar()
+
+        pedido = Pedido.objects.get()
+        self.assertEqual(pedido.descuento_porcentaje, Decimal('0.20'))
+        self.assertEqual(pedido.motivo_descuento, Pedido.MOTIVO_VIP)
+        self.assertEqual(pedido.total, Decimal('111.20'))
+        precios = {
+            'producto' if d.menu_item_id else 'cupcake': d.precio_unitario
+            for d in pedido.detallepedido_set.all()
+        }
+        self.assertEqual(precios, {'producto': Decimal('36.00'), 'cupcake': Decimal('39.20')})
+        self.assertEqual(
+            sum(d.precio_unitario * d.cantidad for d in pedido.detallepedido_set.all()),
+            pedido.total,
+        )
+        # El cupcake conserva su precio base calculado; lo cobrado está en la línea.
+        self.assertEqual(CupcakePersonalizado.objects.get().precio_calculado, Decimal('49.00'))
+
+    def test_cumpleanios_cobra_50(self) -> None:
+        self.hacer_sweet()
+        hoy = timezone.localdate()
+        PerfilVIP.objects.create(
+            usuario=self.usuario,
+            fecha_nacimiento=hoy.replace(year=1995) if (hoy.month, hoy.day) != (2, 29)
+            else datetime.date(1996, 2, 29),
+            cumple_registrado_en=hoy - datetime.timedelta(days=30),
+        )
+        self.con_carrito([self.cupcake()])
+
+        self.comprar()
+
+        pedido = Pedido.objects.get()
+        self.assertEqual(pedido.descuento_porcentaje, Decimal('0.50'))
+        self.assertEqual(pedido.motivo_descuento, Pedido.MOTIVO_CUMPLEANIOS)
+        self.assertEqual(pedido.total, Decimal('24.50'))
+
+    def test_basic_sin_descuento(self) -> None:
+        self.con_carrito([self.cupcake()], productos=1)
+
+        self.comprar()
+
+        pedido = Pedido.objects.get()
+        self.assertEqual(pedido.descuento_porcentaje, Decimal('0'))
+        self.assertEqual(pedido.motivo_descuento, '')
+        self.assertEqual(pedido.total, Decimal('94.00'))
+
+    def test_desglose_en_el_checkout_y_en_la_confirmacion(self) -> None:
+        self.hacer_sweet()
+        self.con_carrito([self.cupcake()], productos=2)
+
+        resumen = self.client.get(reverse('checkout'))
+
+        self.assertEqual(resumen.context['subtotal'], Decimal('139.00'))
+        self.assertEqual(resumen.context['ahorro'], Decimal('27.80'))
+        self.assertEqual(resumen.context['total'], Decimal('111.20'))
+        self.assertContains(resumen, 'Descuento VIP')
+
+        respuesta = self.client.post(reverse('checkout'), {
+            'checkout_token': self.client.session['checkout_token'],
+            'direccion_entrega': 'Calle 3',
+        }, follow=True)
+        self.assertContains(respuesta, 'Descuento aplicado')
+        self.assertContains(respuesta, 'VIP')
+        self.assertContains(respuesta, '−20 %')
+
+    def test_token_reutilizado_no_duplica_el_pedido(self) -> None:
+        self.hacer_sweet()
+        self.con_carrito([self.cupcake()])
+        self.client.get(reverse('checkout'))
+        datos = {'checkout_token': self.client.session['checkout_token'], 'direccion_entrega': 'x'}
+
+        self.client.post(reverse('checkout'), datos)
+        self.con_carrito([self.cupcake()])
+        self.client.post(reverse('checkout'), datos)
+
+        self.assertEqual(Pedido.objects.count(), 1)
+
+    def test_si_el_descuento_cambia_entre_get_y_post_no_cobra(self) -> None:
+        self.hacer_sweet()
+        self.con_carrito([self.cupcake()])
+        self.client.get(reverse('checkout'))
+        token = self.client.session['checkout_token']
+
+        # El Sweet vence antes de confirmar: el total cambia de $39.20 a $49.00.
+        Suscripcion.objects.filter(usuario=self.usuario).update(
+            fecha_fin=timezone.localdate() - datetime.timedelta(days=1)
+        )
+        respuesta = self.client.post(reverse('checkout'), {
+            'checkout_token': token, 'direccion_entrega': 'x',
+        })
+
+        self.assertRedirects(respuesta, reverse('checkout'), fetch_redirect_response=False)
+        self.assertFalse(Pedido.objects.exists())
+
+    def test_el_modelo_valida_descuento_y_motivo(self) -> None:
+        argumentos = {
+            'usuario': self.usuario, 'carrito': {str(self.producto.pk): 1},
+            'direccion': 'x', 'checkout_token': uuid.uuid4(), 'total_esperado': Decimal('45.00'),
+        }
+        for descuento, motivo in ((Decimal('1.5'), 'vip'), (Decimal('0.20'), ''), (Decimal('0'), 'vip'),
+                                  (Decimal('0.20'), 'inventado')):
+            with self.subTest(descuento=descuento, motivo=motivo), self.assertRaises(ValueError):
+                Pedido.objects.crear_desde_carrito(**argumentos, descuento=descuento, motivo=motivo)
+        self.assertFalse(Pedido.objects.exists())
 
 
 class PaginasPublicasTests(TestCase):
