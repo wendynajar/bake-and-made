@@ -8,6 +8,7 @@ llegado. Los UID nunca se escriben en el código; se dan de alta en el admin o c
 
 from __future__ import annotations
 
+import datetime
 import re
 from typing import Any
 
@@ -108,9 +109,10 @@ class TarjetaRFID(models.Model):
 class Terminal(models.Model):
     """Una computadora de la tienda con su lector RFID (por ejemplo "caja-1").
 
-    Es la fuente de verdad de qué tarjeta está activa en el kiosco. La página del
-    kiosco consulta `version` por polling y se recarga cuando cambia. Las
-    operaciones (activar, rechazar, salir, expirar) se agregan en la fase 4.
+    Es la fuente de verdad de qué tarjeta está activa en el kiosco. Cada cambio
+    (entrada, rechazo, salida o expiración) sube `version`; la página del kiosco
+    la consulta por polling y la sesión del navegador se sincroniza con ella
+    (ver `iot.sesion.sincronizar`).
     """
 
     codigo = models.SlugField(unique=True)
@@ -126,6 +128,83 @@ class Terminal(models.Model):
 
     def __str__(self) -> str:
         return self.codigo
+
+    # --- Lecturas del lector -------------------------------------------------
+
+    def registrar_lectura(self, uid: str) -> tuple[str, TarjetaRFID | None]:
+        """Procesa un UID leído en esta terminal y devuelve (resultado, tarjeta).
+
+        - "desconocida": el UID no existe, la tarjeta está inactiva o no tiene dueño.
+        - "sin_sweet": el dueño no tiene el mes del Sweet Plan pagado (vencido).
+        - "ok": la tarjeta queda activa en la terminal.
+
+        Cualquier rechazo también quita la tarjeta activa: una tarjeta inválida
+        cierra la sesión del kiosco, aunque se haya iniciado con contraseña.
+        Toda lectura queda en la bitácora `LecturaRFID`.
+        """
+        from tienda.models import PLAN_SWEET, Suscripcion  # tienda no depende de iot
+
+        uid = normalizar_uid(uid)[:20]
+        tarjeta = (
+            TarjetaRFID.objects.filter(uid=uid, activa=True, usuario__isnull=False)
+            .select_related('usuario')
+            .first()
+        )
+        if tarjeta is None:
+            resultado = LecturaRFID.DESCONOCIDA
+        elif Suscripcion.objects.plan_de(tarjeta.usuario) != PLAN_SWEET:
+            resultado = LecturaRFID.SIN_SWEET
+        else:
+            resultado = LecturaRFID.OK
+
+        if resultado == LecturaRFID.OK:
+            self.activar(tarjeta)
+        else:
+            self.rechazar(resultado)
+        LecturaRFID.objects.create(terminal=self, uid=uid, resultado=resultado)
+        return resultado, tarjeta if resultado == LecturaRFID.OK else None
+
+    # --- Cambios de estado (cada uno sube la versión) -------------------------
+
+    def _cambiar(self, **campos: Any) -> None:
+        """Actualiza los campos y sube `version` en un solo UPDATE atómico.
+
+        Con F() dos lecturas simultáneas nunca dejan la misma versión, así el
+        polling de la página no se pierde ningún cambio.
+        """
+        Terminal.objects.filter(pk=self.pk).update(version=models.F('version') + 1, **campos)
+        self.refresh_from_db()
+
+    def activar(self, tarjeta: TarjetaRFID) -> None:
+        """Deja la tarjeta como activa; cuenta como actividad para los 5 minutos."""
+        self._cambiar(tarjeta_activa=tarjeta, ultimo_rechazo='', ultima_actividad=timezone.now())
+
+    def rechazar(self, motivo: str) -> None:
+        """Quita la tarjeta activa y deja el motivo para el aviso del kiosco."""
+        self._cambiar(tarjeta_activa=None, ultimo_rechazo=motivo)
+
+    def salir(self) -> None:
+        """Quita la tarjeta activa ("Salir" o expiración por inactividad)."""
+        self._cambiar(tarjeta_activa=None, ultimo_rechazo='')
+
+    def registrar_actividad(self, ahora: datetime.datetime | None = None) -> None:
+        """Marca actividad del cliente en el kiosco; no sube la versión (no hay cambio visible)."""
+        Terminal.objects.filter(pk=self.pk).update(ultima_actividad=ahora or timezone.now())
+
+    def expirar_si_inactiva(self, ahora: datetime.datetime | None = None) -> bool:
+        """Saca la tarjeta activa si pasaron VIP_EXPIRA_MINUTOS sin navegar páginas.
+
+        El polling no cuenta como actividad; solo las páginas navegadas (ver
+        `iot.middleware.ActividadKioscoMiddleware`). Devuelve True si expiró.
+        """
+        if self.tarjeta_activa_id is None or self.ultima_actividad is None:
+            return False
+        ahora = ahora or timezone.now()
+        limite = datetime.timedelta(minutes=settings.VIP_EXPIRA_MINUTOS)
+        if ahora - self.ultima_actividad < limite:
+            return False
+        self.salir()
+        return True
 
 
 class LecturaRFID(models.Model):

@@ -60,6 +60,8 @@ if not DEBUG:
     # Render termina TLS en su proxy y reenvía la petición por HTTP.
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = env_bool('SECURE_SSL_REDIRECT', por_defecto=True)
+    # El health check de Render llega por HTTP interno: debe recibir 200, no 301.
+    SECURE_REDIRECT_EXEMPT = [r'^healthz$']
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '0'))
@@ -87,6 +89,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    'iot.middleware.ActividadKioscoMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
@@ -196,6 +199,12 @@ STORAGES = {
 
 VIP_DESCUENTO = '0.20'          # Sweet Plan vigente
 VIP_DESCUENTO_CUMPLE = '0.50'   # Sweet Plan vigente, el día de su cumpleaños
+VIP_EXPIRA_MINUTOS = 5          # Inactividad que cierra la sesión abierta por tarjeta
+IOT_POLL_SEGUNDOS = 2           # Frecuencia del polling del kiosco
+
+# Token compartido con el ESP32 (header "Authorization: Token <valor>").
+# Vacío = /api/rfid/scan/ rechaza toda lectura (401); así no falla el build ni los tests.
+IOT_DEVICE_TOKEN = os.environ.get('IOT_DEVICE_TOKEN', '')
 
 
 # --- Correo --------------------------------------------------------------------

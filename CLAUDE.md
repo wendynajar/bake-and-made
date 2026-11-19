@@ -23,7 +23,11 @@ python manage.py test               # tests de tienda y usuarios
 - `bakeandmade/bakeandmade/settings.py`: toda la configuración se lee de variables de entorno (python-dotenv). WhiteNoise sirve los estáticos y S3 guarda las imágenes subidas (`/media`) si se define `AWS_STORAGE_BUCKET_NAME`.
 - `bakeandmade/bakeandmade/urls.py`: hace `include()` de `usuarios.urls` y `tienda.urls`.
 - `bakeandmade/usuarios/`: registro, login y logout con el `User` nativo; `PerfilVIP` (teléfono y cumpleaños, `PerfilVIP.de(usuario)`, `.registrar_cumpleanios()`, `.es_cumpleanios()`, `.descuento_vigente()`: **única fuente de la regla de descuento**). Comando `crear_usuarios_demo` (requiere `DEMO_PASSWORD` y `--uids` o `DEMO_VIP_UIDS`).
-- `bakeandmade/iot/`: `TarjetaRFID` (inventario, `.objects.libres()`, UID normalizado con `normalizar_uid`), `Terminal` y `LecturaRFID`. Comandos `crear_terminal <codigo>` y `registrar_tarjeta <uid>`.
+- `bakeandmade/iot/`: `TarjetaRFID` (inventario, `.objects.libres()`, `.entregar_a()`, UID normalizado con `normalizar_uid`), `Terminal` (`.registrar_lectura()`, `.activar/rechazar/salir()`, `.expirar_si_inactiva()`) y `LecturaRFID`.
+  - `iot/sesion.py`: `sincronizar(request, terminal)` inicia o cierra la sesión del kiosco según la terminal, conservando carrito y terminal. Cualquier cierre de sesión en un kiosco debe pasar por aquí (lo usa `usuarios.views.CerrarSesionView`).
+  - `iot/middleware.py`: `ActividadKioscoMiddleware` (solo las páginas navegadas cuentan como actividad; `/api/` no).
+  - Rutas: `/api/rfid/scan/` (ESP32, token en `IOT_DEVICE_TOKEN`), `/api/iot/estado/`, `/api/iot/salir/`, `/kiosco/<codigo>/` y `/healthz` (en `bakeandmade/urls.py`).
+  - Comandos `crear_terminal <codigo>`, `registrar_tarjeta <uid>` y `simular_scan <uid> --terminal caja-1` (prueba sin hardware).
 - `bakeandmade/tienda/models.py`: **lógica de negocio** en QuerySets y métodos de modelo:
   - `Suscripcion.objects.plan_de()`, `.vigente_para()`, `Suscripcion.contratar_mes()` (también entrega la tarjeta VIP con `TarjetaRFID.objects.entregar_a()`), `.cancelar()`
   - `Ingrediente.objects.de_categoria().visibles_para(usuario)`
