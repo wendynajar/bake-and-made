@@ -48,6 +48,18 @@ CATEGORIAS_INGREDIENTES = [
     "Topping",
 ]
 
+INGREDIENTES_EXCLUSIVOS = {
+    ("Base", "Red velvet"),
+    ("Relleno", "Dulce de leche"),
+    ("Cobertura", "Queso crema"),
+    ("Topping", "Fresas"),
+}
+"""Un ingrediente premium por categoría, solo para el Sweet Plan (hallazgo #9).
+
+Solo se aplica al crear el ingrediente; después el admin manda. La migración
+tienda.0007 los marca en las bases que ya existían.
+"""
+
 INGREDIENTES = [
     # Categoría, nombre, precio adicional
     ("Base", "Vainilla", "0.00"),
@@ -115,7 +127,9 @@ class Command(BaseCommand):
                 defaults={
                     "precio_adicional": Decimal(precio),
                     "stock_disponible": 100,
-                    "solo_suscriptores": False,
+                    "solo_suscriptores": (
+                        (categoria_nombre, nombre) in INGREDIENTES_EXCLUSIVOS
+                    ),
                     "activo": True,
                 },
             )

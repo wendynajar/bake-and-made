@@ -3,11 +3,23 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.http import HttpRequest, HttpResponse
 from django.urls import include, path
+
+
+def healthz(request: HttpRequest) -> HttpResponse:
+    """Health check de Render y ping del ESP32 (mantiene despierta la instancia gratuita).
+
+    No toca la base de datos ni la sesión: solo confirma que el proceso responde.
+    """
+    return HttpResponse('ok', content_type='text/plain')
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('healthz', healthz, name='healthz'),
     path('', include('usuarios.urls')),
+    path('', include('iot.urls')),
     path('', include('tienda.urls')),
 ]
 

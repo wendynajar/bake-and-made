@@ -1192,6 +1192,53 @@
     letter-spacing: .8px;
 }
 
+/* ====================================
+   MEMBRESÍA VIP (= Sweet Plan vigente)
+   ==================================== */
+
+.nav-vip {
+    color: var(--wine);
+    font-weight: 700;
+}
+
+.vip-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 10px;
+    border: 1px solid rgba(201, 164, 109, .75);
+    border-radius: 30px;
+    background: #fff1d8;
+    color: #6d4720;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .8px;
+    white-space: nowrap;
+}
+
+.vip-badge-cumple {
+    border-color: var(--rose);
+    background: var(--rose-light);
+    color: var(--wine);
+}
+
+/* Precio base tachado + precio final con descuento. */
+.precio-vip {
+    display: inline-flex;
+    flex-direction: column;
+    line-height: 1.2;
+}
+
+.premium-site del {
+    color: #a1868e;
+    font-size: .85em;
+    font-weight: 400;
+}
+
+.summary-row-vip,
+.summary-row-vip strong {
+    color: var(--rose);
+}
+
 .plans-page {
     max-width: 1120px;
     min-height: 55vh;

@@ -1,0 +1,31 @@
+{% comment %}
+Barra y polling del kiosco. Se incluye antes de </body> en todas las páginas,
+pero solo se dibuja en un navegador vinculado con /kiosco/<codigo>/.
+{% endcomment %}
+{% load static %}
+{% if es_kiosco %}
+    <link rel="stylesheet" href="{% static 'iot/kiosco.css' %}">
+
+    <div id="kiosco"
+         data-estado-url="{% url 'iot_estado' %}"
+         data-salir-url="{% url 'iot_salir' %}"
+         data-version="{{ kiosco_version }}"
+         data-poll-ms="{{ kiosco_poll_ms }}"
+         data-csrf="{{ csrf_token }}"
+         hidden></div>
+
+    <div class="kiosco-aviso" id="kiosco-aviso" role="alert" hidden></div>
+
+    {% if kiosco_login_tarjeta and user.is_authenticated %}
+        <div class="kiosco-barra" role="region" aria-label="Sesión de tu tarjeta VIP">
+            <span class="kiosco-saludo">Hola, {{ user.first_name|default:user.username }}</span>
+            <button type="button" class="kiosco-salir" id="kiosco-salir">Salir</button>
+        </div>
+    {% else %}
+        <div class="kiosco-barra kiosco-barra-invitacion" role="note">
+            <span>¿Eres Sweet? Pasa tu tarjeta VIP por el lector para entrar.</span>
+        </div>
+    {% endif %}
+
+    <script src="{% static 'iot/polling.js' %}" defer></script>
+{% endif %}

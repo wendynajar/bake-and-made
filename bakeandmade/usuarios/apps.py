@@ -4,7 +4,7 @@ from django.apps import AppConfig
 
 
 class UsuariosConfig(AppConfig):
-    """Autenticación de clientes. Usa el modelo User nativo de Django (sin modelos propios)."""
+    """Autenticación de clientes con el User nativo de Django, más su perfil VIP."""
 
     name = 'usuarios'
     verbose_name = 'Usuarios'

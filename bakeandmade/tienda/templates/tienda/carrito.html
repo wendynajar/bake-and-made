@@ -53,9 +53,6 @@
                     <span class="user-greeting">
                         Hola, {{ user.first_name|default:user.username }}
                     </span>
-                    {% if es_plan_sweet %}
-                        <span class="sweet-menu-badge">Sweet</span>
-                    {% endif %}
                     <form method="POST" action="{% url 'logout' %}">
                         {% csrf_token %}
                         <button class="nav-account" type="submit">
@@ -67,6 +64,7 @@
                         Mi cuenta
                     </a>
                 {% endif %}
+                {% include 'tienda/_vip_nav.html' %}
             </nav>
 
         </div>
@@ -141,6 +139,7 @@
                                     <h3>{{ item.nombre }}</h3>
 
                                     <p class="cart-unit-price">
+                                        {% if vip_activo %}<del aria-label="Precio normal">${{ item.precio_base|floatformat:2 }}</del>{% endif %}
                                         ${{ item.precio_unitario|floatformat:2 }} MXN / unidad
                                     </p>
 
@@ -208,7 +207,8 @@
                                     <h3>{{ item.producto.nombre_producto }}</h3>
 
                                     <p class="cart-unit-price">
-                                        ${{ item.producto.precio_base|floatformat:2 }} MXN / unidad
+                                        {% if vip_activo %}<del aria-label="Precio normal">${{ item.precio_base|floatformat:2 }}</del>{% endif %}
+                                        ${{ item.precio_unitario|floatformat:2 }} MXN / unidad
                                     </p>
 
                                     <div class="cart-product-controls">
@@ -288,8 +288,18 @@
 
                     <div class="summary-row">
                         <span>Subtotal</span>
-                        <strong>${{ total }} MXN</strong>
+                        <strong>${{ subtotal|floatformat:2 }} MXN</strong>
                     </div>
+
+                    {% if vip_activo and ahorro > 0 %}
+                        <div class="summary-row summary-row-vip">
+                            <span>
+                                {% if vip_es_cumpleanios %}Cumpleaños{% else %}Descuento VIP{% endif %}
+                                −{{ vip_porcentaje }} %
+                            </span>
+                            <strong>−${{ ahorro|floatformat:2 }} MXN</strong>
+                        </div>
+                    {% endif %}
 
                     <div class="summary-row">
                         <span>Envío</span>
@@ -300,7 +310,7 @@
 
                     <div class="summary-total">
                         <span>Total de productos</span>
-                        <strong>${{ total }} MXN</strong>
+                        <strong>${{ total|floatformat:2 }} MXN</strong>
                     </div>
 
                     <p class="summary-note">
@@ -366,5 +376,6 @@
         </div>
     </footer>
 
+    {% include 'iot/_kiosco.html' %}
 </body>
 </html>

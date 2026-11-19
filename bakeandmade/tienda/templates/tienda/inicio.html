@@ -75,6 +75,7 @@
                         Mi cuenta
                     </a>
                 {% endif %}
+                {% include 'tienda/_vip_nav.html' %}
             </nav>
 
         </div>
@@ -232,7 +233,14 @@
                             <p>{{ producto.descripcion }}</p>
 
                             <div class="product-bottom">
-                                <strong>${{ producto.precio_base }} MXN</strong>
+                                {% if vip_activo %}
+                                    <span class="precio-vip">
+                                        <del aria-label="Precio normal">${{ producto.precio_base }}</del>
+                                        <strong>${{ producto.precio_final }} MXN</strong>
+                                    </span>
+                                {% else %}
+                                    <strong>${{ producto.precio_base }} MXN</strong>
+                                {% endif %}
 
                                 <form method="POST"
                                       action="{% url 'agregar_carrito' producto.id %}">
@@ -396,6 +404,7 @@
         </div>
     </footer>
 
+    {% include 'iot/_kiosco.html' %}
 </body>
 </html>
 

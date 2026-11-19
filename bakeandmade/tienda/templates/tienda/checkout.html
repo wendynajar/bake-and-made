@@ -54,6 +54,7 @@
                         Hola, {{ user.first_name|default:user.username }}
                     </span>
                 {% endif %}
+                {% include 'tienda/_vip_nav.html' %}
             </nav>
 
         </div>
@@ -269,5 +270,6 @@
     });
 </script>
 
+    {% include 'iot/_kiosco.html' %}
 </body>
 </html>
