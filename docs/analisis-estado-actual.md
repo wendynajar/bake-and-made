@@ -191,6 +191,7 @@ Datos iniciales: `python manage.py cargar_catalogo` crea 13 productos, 5 categor
 18. **Rama de despliegue.** Render despliega `feat/render-allocation`, pero `docs/despliegue-render.md` todavía dice `main`. Se corrige en la fase 9 de `IOT_VIP_SPEC.md`.
 19. Si no se definió `AWS_STORAGE_BUCKET_NAME` en Render, las imágenes subidas desde el admin se pierden en cada deploy.
 20. No hay CI: nadie ejecuta `python manage.py test` ni `check --deploy` antes de cada deploy.
+21. **`Pipfile.lock` desactualizado** (detectado el 2026-11-18): no incluye gunicorn, whitenoise, dj-database-url, psycopg, python-dotenv, django-storages ni segno, aunque el `Pipfile` sí. Render no lo usa (instala con `requirements.txt`), pero `pipenv install` en local instalaría lo viejo. Hay que regenerarlo con `pipenv lock`.
 
 **Calidad de código**
 11. `Suscripcion.objects.plan_de()` lanza un `UPDATE` (`expirar_vencidas`) en cada petición de un usuario autenticado, porque lo llama el context processor. Ya está documentado en el docstring. A futuro, moverlo a un cron job.

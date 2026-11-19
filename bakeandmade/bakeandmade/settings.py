@@ -171,6 +171,8 @@ if USAR_S3:
     AWS_S3_CUSTOM_DOMAIN = os.environ.get('AWS_S3_CUSTOM_DOMAIN') or None
     AWS_DEFAULT_ACL = None
     AWS_QUERYSTRING_AUTH = env_bool('AWS_QUERYSTRING_AUTH', por_defecto=True)
+    # Las URL firmadas (videos del QR VIP) vencen en 1 hora.
+    AWS_QUERYSTRING_EXPIRE = 3600
     AWS_S3_FILE_OVERWRITE = False
     # boto3 lee AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY directamente del entorno.
     ALMACENAMIENTO_MEDIA = {

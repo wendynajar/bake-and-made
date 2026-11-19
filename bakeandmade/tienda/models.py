@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime
 import secrets
 import uuid
-from calendar import monthrange
+from calendar import isleap, monthrange
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
@@ -20,6 +20,7 @@ from typing import Any
 from django.apps import apps
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import AnonymousUser, User
+from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.db.models import F
 from django.utils import timezone
@@ -186,12 +187,49 @@ class Suscripcion(models.Model):
         self.save(update_fields=['estado'])
 
 
+def misma_fecha_en_anio(fecha: datetime.date, anio: int) -> datetime.date:
+    """La fecha en otro año; el 29 de febrero cae el 28 en años no bisiestos."""
+    if (fecha.month, fecha.day) == (2, 29) and not isleap(anio):
+        return datetime.date(anio, 2, 28)
+    return fecha.replace(year=anio)
+
+
+class RecordatorioQuerySet(models.QuerySet['RecordatorioEvento']):
+    """Consultas del calendario VIP; siempre filtradas por el dueño."""
+
+    def de(self, usuario: User) -> RecordatorioQuerySet:
+        """Solo las fechas del usuario: nadie ve ni borra las de otro."""
+        return self.filter(usuario=usuario)
+
+    def ocurrencias(
+        self, desde: datetime.date, hasta: datetime.date
+    ) -> list[tuple[RecordatorioEvento, datetime.date]]:
+        """(evento, fecha) de cada aparición dentro de [desde, hasta).
+
+        Los eventos que se repiten cada año aparecen una vez por año del rango,
+        así el calendario los muestra sin que el usuario los capture de nuevo.
+        """
+        resultado = []
+        for evento in self.order_by('fecha_evento', 'pk'):
+            if not evento.se_repite_cada_anio:
+                if desde <= evento.fecha_evento < hasta:
+                    resultado.append((evento, evento.fecha_evento))
+                continue
+            for anio in range(max(desde.year, evento.fecha_evento.year), hasta.year + 1):
+                dia = misma_fecha_en_anio(evento.fecha_evento, anio)
+                if desde <= dia < hasta:
+                    resultado.append((evento, dia))
+        return resultado
+
+
 class RecordatorioEvento(models.Model):
     """Fecha especial del cliente, mostrada en el calendario de la página VIP.
 
     `tipo` y `se_repite_cada_anio` permiten pintar cumpleaños y aniversarios
     cada año sin que el usuario los vuelva a capturar.
     """
+
+    LONGITUD_NOMBRE = 100
 
     CUMPLEANIOS = 'cumpleanios'
     ANIVERSARIO = 'aniversario'
@@ -209,8 +247,40 @@ class RecordatorioEvento(models.Model):
     tipo = models.CharField(max_length=20, choices=TIPOS, default=OTRO)
     se_repite_cada_anio = models.BooleanField(default=False)
 
+    objects = RecordatorioQuerySet.as_manager()
+
     def __str__(self) -> str:
         return f"{self.nombre_evento} ({self.fecha_evento})"
+
+    @classmethod
+    def crear_para(cls, usuario: User, nombre: Any, fecha: Any, tipo: Any) -> RecordatorioEvento:
+        """Valida los datos del calendario y crea la fecha del usuario.
+
+        Recibe valores crudos del navegador y lanza ValidationError con mensajes
+        para el cliente. Cumpleaños y aniversarios se repiten cada año.
+        """
+        errores: dict[str, str] = {}
+        nombre = nombre.strip() if isinstance(nombre, str) else ''
+        if not nombre or len(nombre) > cls.LONGITUD_NOMBRE:
+            errores['nombre_evento'] = f'Escribe un nombre de 1 a {cls.LONGITUD_NOMBRE} caracteres.'
+        try:
+            fecha = datetime.date.fromisoformat(fecha) if isinstance(fecha, str) else None
+        except ValueError:
+            fecha = None
+        if fecha is None:
+            errores['fecha_evento'] = 'Elige una fecha válida.'
+        if tipo not in dict(cls.TIPOS):
+            errores['tipo'] = 'Elige un tipo de fecha válido.'
+        if errores:
+            raise ValidationError(errores)
+
+        return cls.objects.create(
+            usuario=usuario,
+            nombre_evento=nombre,
+            fecha_evento=fecha,
+            tipo=tipo,
+            se_repite_cada_anio=tipo in (cls.CUMPLEANIOS, cls.ANIVERSARIO),
+        )
 
 
 # =============================================================================
@@ -801,6 +871,18 @@ def generar_codigo_qr() -> str:
     return secrets.token_urlsafe(16)
 
 
+class ExperienciaQRQuerySet(models.QuerySet['ExperienciaQR']):
+    """Consultas de videos VIP."""
+
+    def vigentes(self) -> ExperienciaQRQuerySet:
+        """Experiencias cuya fecha de expiración no ha pasado."""
+        return self.filter(fecha_expiracion__gt=timezone.now())
+
+    def vigente_de(self, usuario: User) -> ExperienciaQR | None:
+        """El video vigente más reciente del usuario, o None ("estará listo pronto")."""
+        return self.vigentes().filter(usuario=usuario).order_by('-fecha_expiracion', '-pk').first()
+
+
 class ExperienciaQR(models.Model):
     """Video personal de un usuario VIP, que se abre al escanear su código QR.
 
@@ -822,6 +904,8 @@ class ExperienciaQR(models.Model):
     video = models.FileField(upload_to='videos/', max_length=255)
     mensaje_texto = models.TextField(blank=True, null=True)
     fecha_expiracion = models.DateTimeField()
+
+    objects = ExperienciaQRQuerySet.as_manager()
 
     def __str__(self) -> str:
         return f"QR {self.codigo_unico}"

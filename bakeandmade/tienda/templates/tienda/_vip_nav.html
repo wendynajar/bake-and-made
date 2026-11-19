@@ -1,8 +1,7 @@
 {% comment %}
 Pestaña VIP de la barra de navegación, entre el carrito y el saludo al usuario.
 Solo aparece con una sesión Sweet vigente (VIP = Sweet Plan).
-TODO fase 8: el enlace pasa a /vip/ cuando exista la página de membresía.
 {% endcomment %}
 {% if vip_activo %}
-    <a href="{% url 'suscripcion' %}" class="nav-vip">VIP</a>
+    <a href="{% url 'vip' %}" class="nav-vip">VIP</a>
 {% endif %}

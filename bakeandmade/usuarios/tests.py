@@ -1,8 +1,10 @@
 """Pruebas del registro de usuarios, del perfil VIP y de los usuarios demo."""
 
 import datetime
+import json
 import os
 from io import StringIO
+from typing import Any
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -13,7 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from iot.models import TarjetaRFID
-from tienda.models import PLAN_SWEET, Suscripcion
+from tienda.models import PLAN_SWEET, ExperienciaQR, RecordatorioEvento, Suscripcion
 
 from .models import CumpleYaRegistrado, FechaCumpleInvalida, PerfilVIP
 
@@ -178,3 +180,215 @@ class CumpleaniosTests(TestCase):
                 perfil.registrar_cumpleanios(fecha, self.HOY)
         perfil.refresh_from_db()
         self.assertIsNone(perfil.fecha_nacimiento)
+
+
+# =============================================================================
+# Fase 8: página /vip/, calendario, cumpleaños y video del QR
+# =============================================================================
+
+class VIPMixin:
+    """Ana y Bruno con Sweet vigente; Carla Basic."""
+
+    def setUp(self) -> None:
+        self.ana = User.objects.create_user('ana', password='x-clave-segura-1', first_name='Ana')
+        self.bruno = User.objects.create_user('bruno', password='x-clave-segura-1')
+        self.carla = User.objects.create_user('carla', password='x-clave-segura-1')
+        Suscripcion.contratar_mes(self.ana)
+        Suscripcion.contratar_mes(self.bruno)
+
+    def crear_fecha(self, **datos: Any) -> Any:
+        cuerpo = {'nombre_evento': 'Aniversario', 'fecha_evento': '2026-12-05', 'tipo': 'otro'}
+        cuerpo.update(datos)
+        return self.client.post(
+            reverse('vip_fechas'), data=json.dumps(cuerpo), content_type='application/json'
+        )
+
+    def listar(self, start: str = '2026-11-30', end: str = '2027-01-11') -> list[dict[str, Any]]:
+        respuesta = self.client.get(reverse('vip_fechas'), {'start': start, 'end': end})
+        self.assertEqual(respuesta.status_code, 200)
+        return respuesta.json()
+
+
+class FechasVIPTests(VIPMixin, TestCase):
+    """Cada usuario Sweet agrega, ve y borra solo sus propias fechas."""
+
+    def test_crear_y_listar(self) -> None:
+        self.client.force_login(self.ana)
+
+        respuesta = self.crear_fecha()
+
+        self.assertEqual(respuesta.status_code, 201)
+        self.assertEqual(respuesta.json()['title'], 'Aniversario')
+        self.assertEqual([e['start'] for e in self.listar()], ['2026-12-05'])
+
+    def test_b_no_ve_ni_borra_las_fechas_de_a(self) -> None:
+        self.client.force_login(self.ana)
+        evento_id = self.crear_fecha().json()['id']
+
+        self.client.force_login(self.bruno)
+        self.assertEqual(self.listar(), [])
+        borrar = self.client.delete(reverse('vip_fecha', args=[evento_id]))
+
+        self.assertEqual(borrar.status_code, 404)
+        self.assertTrue(RecordatorioEvento.objects.filter(pk=evento_id).exists())
+
+    def test_el_duenio_la_borra(self) -> None:
+        self.client.force_login(self.ana)
+        evento_id = self.crear_fecha().json()['id']
+
+        respuesta = self.client.delete(reverse('vip_fecha', args=[evento_id]))
+
+        self.assertEqual(respuesta.status_code, 204)
+        self.assertFalse(RecordatorioEvento.objects.exists())
+
+    def test_basic_y_anonimo_reciben_403(self) -> None:
+        self.assertEqual(self.client.get(reverse('vip_fechas')).status_code, 403)
+        self.client.force_login(self.carla)
+        self.assertEqual(self.client.get(reverse('vip_fechas')).status_code, 403)
+        self.assertEqual(self.crear_fecha().status_code, 403)
+        self.assertFalse(RecordatorioEvento.objects.exists())
+
+    def test_datos_invalidos_400(self) -> None:
+        self.client.force_login(self.ana)
+        for datos in ({'nombre_evento': ''}, {'fecha_evento': '2026-13-40'}, {'tipo': 'boda'},
+                      {'nombre_evento': 'x' * 101}):
+            with self.subTest(datos=datos):
+                respuesta = self.crear_fecha(**datos)
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn('errores', respuesta.json())
+        self.assertFalse(RecordatorioEvento.objects.exists())
+
+    def test_aniversario_se_repite_cada_anio(self) -> None:
+        self.client.force_login(self.ana)
+        self.crear_fecha(tipo='aniversario', fecha_evento='2020-01-03')
+
+        fechas = [e['start'] for e in self.listar('2027-01-01', '2028-01-05')]
+
+        self.assertEqual(fechas, ['2027-01-03', '2028-01-03'])
+
+    def test_mi_cumpleanios_aparece_fijo_y_no_borrable(self) -> None:
+        PerfilVIP.objects.create(usuario=self.ana, fecha_nacimiento=datetime.date(1995, 12, 14))
+        self.client.force_login(self.ana)
+
+        cumple = [e for e in self.listar() if e['extendedProps']['tipo'] == 'mi_cumpleanios']
+
+        self.assertEqual(len(cumple), 1)
+        self.assertEqual(cumple[0]['start'], '2026-12-14')
+        self.assertFalse(cumple[0]['extendedProps']['borrable'])
+
+    def test_rango_invalido_400(self) -> None:
+        self.client.force_login(self.ana)
+        respuesta = self.client.get(reverse('vip_fechas'), {'start': '2026-01-01', 'end': '2030-01-01'})
+        self.assertEqual(respuesta.status_code, 400)
+
+
+class CumpleaniosAPITests(VIPMixin, TestCase):
+    """POST /api/vip/cumpleanios/: 201 la primera vez, 409 después, 400 si es inválida."""
+
+    def registrar(self, fecha: Any) -> Any:
+        return self.client.post(
+            reverse('vip_cumpleanios'), data=json.dumps({'fecha': fecha}),
+            content_type='application/json',
+        )
+
+    def test_primer_registro_luego_409(self) -> None:
+        self.client.force_login(self.ana)
+
+        self.assertEqual(self.registrar('1995-03-14').status_code, 201)
+        segundo = self.registrar('1990-01-01')
+
+        self.assertEqual(segundo.status_code, 409)
+        self.assertEqual(PerfilVIP.objects.get(usuario=self.ana).fecha_nacimiento,
+                         datetime.date(1995, 3, 14))
+
+    def test_fecha_futura_o_invalida_400(self) -> None:
+        self.client.force_login(self.ana)
+        futura = (timezone.localdate() + datetime.timedelta(days=1)).isoformat()
+        for fecha in (futura, 'ayer', None, 123):
+            with self.subTest(fecha=fecha):
+                self.assertEqual(self.registrar(fecha).status_code, 400)
+        self.assertFalse(PerfilVIP.objects.filter(fecha_nacimiento__isnull=False).exists())
+
+    def test_basic_403(self) -> None:
+        self.client.force_login(self.carla)
+        self.assertEqual(self.registrar('1995-03-14').status_code, 403)
+
+
+URL_FIRMADA = 'https://bucket.s3.amazonaws.com/media/videos/ana.mp4?X-Amz-Signature=abc'
+
+
+@mock.patch('django.db.models.fields.files.FieldFile.url', new_callable=mock.PropertyMock,
+            return_value=URL_FIRMADA)
+class VideoQRTests(VIPMixin, TestCase):
+    """/vip/v/<codigo_unico>/ redirige a la URL firmada de S3 si el video sigue vigente."""
+
+    def crear_experiencia(self, horas: int) -> ExperienciaQR:
+        return ExperienciaQR.objects.create(
+            usuario=self.ana, video='videos/ana.mp4', mensaje_texto='¡Gracias, Ana!',
+            fecha_expiracion=timezone.now() + datetime.timedelta(hours=horas),
+        )
+
+    def test_vigente_redirige_a_s3_sin_sesion(self, _url: Any) -> None:
+        experiencia = self.crear_experiencia(horas=24)
+
+        respuesta = self.client.get(reverse('video_qr', args=[experiencia.codigo_unico]))
+
+        self.assertRedirects(respuesta, URL_FIRMADA, fetch_redirect_response=False)
+
+    def test_expirado_o_inexistente_404(self, _url: Any) -> None:
+        experiencia = self.crear_experiencia(horas=-1)
+        self.assertEqual(
+            self.client.get(reverse('video_qr', args=[experiencia.codigo_unico])).status_code, 404
+        )
+        self.assertEqual(self.client.get(reverse('video_qr', args=['no-existe'])).status_code, 404)
+
+    def test_la_pagina_vip_muestra_el_qr(self, _url: Any) -> None:
+        experiencia = self.crear_experiencia(horas=24)
+        self.client.force_login(self.ana)
+
+        respuesta = self.client.get(reverse('vip'))
+
+        self.assertContains(respuesta, '<svg')
+        self.assertContains(respuesta, f'/vip/v/{experiencia.codigo_unico}/')
+        self.assertContains(respuesta, '¡Gracias, Ana!')
+
+
+class PaginaVIPTests(VIPMixin, TestCase):
+    """Acceso y contenido de /vip/."""
+
+    def test_anonimo_va_al_login_y_basic_a_planes(self) -> None:
+        respuesta = self.client.get(reverse('vip'))
+        self.assertIn(reverse('login'), respuesta['Location'])
+
+        self.client.force_login(self.carla)
+        self.assertRedirects(self.client.get(reverse('vip')), reverse('suscripcion'))
+
+    def test_sweet_ve_su_membresia(self) -> None:
+        TarjetaRFID.objects.create(uid='A1B2C3D4', usuario=self.ana)
+        self.client.force_login(self.ana)
+
+        respuesta = self.client.get(reverse('vip'))
+
+        self.assertContains(respuesta, 'VIP — <em>Ana</em>', html=False)
+        self.assertContains(respuesta, 'termina en …D4')
+        self.assertContains(respuesta, '20 %')
+        self.assertContains(respuesta, 'Tu video estará listo pronto.')
+        self.assertContains(respuesta, 'id="form-cumple"')
+
+    def test_sin_tarjeta_esta_en_camino(self) -> None:
+        self.client.force_login(self.bruno)
+        self.assertContains(self.client.get(reverse('vip')), 'En camino')
+
+    def test_cumpleanios_registrado_ya_no_es_editable(self) -> None:
+        PerfilVIP.objects.create(usuario=self.ana, fecha_nacimiento=datetime.date(1995, 3, 14),
+                                 cumple_registrado_en=datetime.date(2026, 1, 1))
+        self.client.force_login(self.ana)
+
+        respuesta = self.client.get(reverse('vip'))
+
+        self.assertNotContains(respuesta, 'id="form-cumple"')
+        self.assertContains(respuesta, 'Para corregirla, pídelo en tienda.')
+
+    def test_la_pestana_vip_apunta_a_la_pagina(self) -> None:
+        self.client.force_login(self.ana)
+        self.assertContains(self.client.get(reverse('inicio')), f'href="{reverse("vip")}" class="nav-vip"')
