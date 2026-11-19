@@ -41,7 +41,7 @@ python manage.py test               # tests de tienda y usuarios
 - Plantillas: las páginas no heredan de `base.html` (cada una repite su encabezado). Lo común va en fragmentos incluidos en todas: `tienda/_vip_nav.html` (pestaña "VIP", entre el carrito y el saludo) e `iot/_kiosco.html` (polling y barra del kiosco, antes de `</body>`). Contexto VIP y de kiosco en `usuarios.context_processors.vip`.
 - `bakeandmade/tienda/views.py`: vistas delgadas (HTTP → modelos → plantilla/redirect).
 
-- `firmware/esp32-vip/`: lector RFID (PlatformIO, ESP32 + RC522). Credenciales en `include/secrets.h` (en `.gitignore`; plantilla `secrets.example.h`). Pines, LEDs y lectura de UID en su `README.md`.
+- `firmware/esp32-vip/`: lector RFID (PlatformIO, ESP32 + RC522). Credenciales en `include/secrets.h` (en `.gitignore`; plantilla `secrets.example.h`). Pines, LEDs y lectura de UID en su `README.md`. Se carga con `cargar.ps1` (Windows; PlatformIO se cuelga compilando sobre `\\wsl.localhost\...`, así que compila en una copia en `%LOCALAPPDATA%`) o `cargar.sh` (WSL, con `usbipd-win`). No es parte del despliegue en Render.
 
 ## Reglas (de ARCHITECTURE.md)
 - Apps separadas por responsabilidad: `tienda`, `usuarios` y, a futuro, `iot`.

@@ -32,12 +32,55 @@ Lee la tarjeta VIP, envía su UID a `POST /api/rfid/scan/` en Render y enciende 
    - `API_URL`: `https://bake-and-made.onrender.com` (sin `/` final).
    - `IOT_DEVICE_TOKEN`: el mismo valor que en el panel de Render.
    - `TERMINAL`: `caja-1`.
-3. Conecta el ESP32 por USB, carga el programa y abre el monitor serie:
-   ```bash
-   pio run -t upload
-   pio device monitor
-   ```
+3. Conecta el ESP32 por USB y usa el script de tu entorno (ver [Cargar el programa](#cargar-el-programa)). Compila, carga el programa y abre el monitor serie.
+
    Debe aparecer `RC522: Firmware Version: 0x92` (o `0x91`). Si sale `0x00` o `0xFF`, revisa los cables.
+
+## Cargar el programa
+
+El firmware **no forma parte del despliegue en Render**: `build.sh` solo usa `bakeandmade/`. Estos scripts solo se ejecutan en la computadora que tiene el ESP32 conectado.
+
+### Desde Windows (PowerShell): `cargar.ps1`
+
+```powershell
+cd \\wsl.localhost\Ubuntu\home\<usuario>\bake-and-made\bake-and-made\firmware\esp32-vip
+powershell -ExecutionPolicy Bypass -File .\cargar.ps1              # detecta el COM del ESP32
+powershell -ExecutionPolicy Bypass -File .\cargar.ps1 -Puerto COM7
+powershell -ExecutionPolicy Bypass -File .\cargar.ps1 -SoloCompilar
+```
+
+Requiere PlatformIO en el Python de Windows (`python -m pip install platformio`).
+
+**Por qué un script:** si el repo vive en WSL, la ruta del proyecto es `\\wsl.localhost\...` (una ruta de red), y PlatformIO se cuelga al compilar ahí sin mostrar ningún error: se queda en `Processing esp32dev`. Eso pasa aunque se ejecute desde PowerShell. El script copia `src/`, `include/` y `platformio.ini` a `%LOCALAPPDATA%\bake-and-made\esp32-vip` y compila ahí. Esa copia incluye `secrets.h`: no la subas a ningún repositorio.
+
+### Desde WSL o Linux: `cargar.sh`
+
+```bash
+cd firmware/esp32-vip
+./cargar.sh                          # detecta /dev/ttyUSB* o /dev/ttyACM*
+./cargar.sh --puerto /dev/ttyUSB0
+./cargar.sh --solo-compilar
+```
+
+Requiere PlatformIO en WSL (`pipx install platformio`; no va en `requirements.txt`). En WSL la ruta es nativa y compila directo, pero WSL no ve el USB de Windows. Hay que pasárselo con [usbipd-win](https://github.com/dorssel/usbipd-win), en PowerShell como administrador:
+
+```powershell
+usbipd list                       # BUSID del "Silicon Labs CP210x" o "CH340", p. ej. 1-5
+usbipd bind --busid 1-5           # solo la primera vez
+usbipd attach --wsl --busid 1-5   # cada vez que conectes la placa
+usbipd detach --busid 1-5         # para regresarla a Windows
+```
+
+Mientras la placa está en WSL, Windows no ve su COM, y al revés. Si no tienes permiso sobre el puerto: `sudo usermod -aG dialout $USER` y luego `wsl --shutdown`.
+
+### Si la carga falla
+
+| Síntoma | Causa |
+|---|---|
+| Se queda en `Processing esp32dev` sin avanzar | Se compila sobre `\\wsl.localhost\...`: usa `cargar.ps1` |
+| `Could not open COM7, the port doesn't exist` (aunque el puerto exista) | Otro programa tiene el puerto abierto: cierra el monitor serie (terminal, Arduino IDE o VS Code) |
+| Se queda en `Connecting.....` | Mantén presionado **BOOT** hasta que empiece `Writing at 0x...` |
+| El monitor muestra textos que no son `UID ...`, `HTTP ...` | La placa tiene otro programa: la carga no terminó; repítela hasta ver `[SUCCESS]` |
 
 ## Leer los UID de las 3 tarjetas
 
