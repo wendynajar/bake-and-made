@@ -35,6 +35,25 @@ PRODUCTOS = [
      "Selección de postres artesanales para regalar."),
 ]
 
+IMAGENES = {
+     "Cupcake red velvet": "productos/crv.jpg",
+    "Cupcake de fresa": "productos/cf1.jpg",
+    "Cupcake de zanahoria": "productos/cz.jpg",
+
+    "Galleta con chispas de chocolate": "productos/gcc.jpg",
+    "Galleta red velvet": "productos/grv.jpg",
+    "Galleta de mantequilla": "productos/gm.jpg",
+
+    "Brownie de chocolate": "productos/bc.jpg",
+    "Cheesecake de fresa": "productos/cf.jpg",
+
+    "Pastel de chocolate": "productos/pc.jpg",
+    "Pastel de tres leches": "productos/ptl.jpg",
+    "Pastel de zanahoria": "productos/pz.jpg",
+
+    "Caja de 6 cupcakes": "productos/csc.jpg",
+    "Caja de regalo dulce": "productos/crd.jpg",
+}
 CATEGORIAS_INGREDIENTES = [
     "Base",
     "Relleno",
@@ -132,7 +151,13 @@ class Command(BaseCommand):
                 nombre=categoria_nombre
             )
 
-            if Menu.objects.filter(nombre_producto=nombre).exists():
+            producto = Menu.objects.filter(nombre_producto=nombre).first()
+
+            if producto:
+                if nombre in IMAGENES:
+                    producto.imagen = IMAGENES[nombre]
+                    producto.save()
+
                 existentes += 1
                 self.stdout.write(f"Ya existe: {nombre}")
                 continue

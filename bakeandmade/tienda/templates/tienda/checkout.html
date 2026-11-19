@@ -122,9 +122,53 @@
                     </div>
 
                     <div class="checkout-field">
-                        <label for="direccion_entrega">
-                            Dirección de entrega <span>*</span>
-                        </label>
+    <label for="calle">Calle *</label>
+    <input type="text" id="calle" name="calle"
+           maxlength="150" required>
+</div>
+
+<div class="checkout-field">
+    <label for="numero_exterior">Número exterior *</label>
+    <input type="text" id="numero_exterior"
+           name="numero_exterior" maxlength="20" required>
+</div>
+
+<div class="checkout-field">
+    <label for="numero_interior">Número interior</label>
+    <input type="text" id="numero_interior"
+           name="numero_interior" maxlength="20">
+</div>
+
+<div class="checkout-field">
+    <label for="colonia">Colonia *</label>
+    <input type="text" id="colonia" name="colonia"
+           maxlength="100" required>
+</div>
+
+<div class="checkout-field">
+    <label for="codigo_postal">Código postal *</label>
+    <input type="text" id="codigo_postal"
+           name="codigo_postal" maxlength="5"
+           pattern="[0-9]{5}" required>
+</div>
+
+<div class="checkout-field">
+    <label for="ciudad">Ciudad *</label>
+    <input type="text" id="ciudad" name="ciudad"
+           maxlength="100" required>
+</div>
+
+<div class="checkout-field">
+    <label for="estado">Estado *</label>
+    <input type="text" id="estado" name="estado"
+           maxlength="100" required>
+</div>
+
+<div class="checkout-field">
+    <label for="referencias">Referencias adicionales</label>
+    <textarea id="referencias" name="referencias"
+              rows="3" maxlength="500"></textarea>
+</div>
 
                         <textarea
                             id="direccion_entrega"

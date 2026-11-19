@@ -487,16 +487,37 @@ def checkout(request):
                 'o ya fue procesada.'
             )
             return redirect('ver_carrito')
+# Recibir los datos de dirección por separado.
+        calle = request.POST.get('calle', '').strip()
+        numero_exterior = request.POST.get('numero_exterior', '').strip()
+        numero_interior = request.POST.get('numero_interior', '').strip()
+        colonia = request.POST.get('colonia', '').strip()
+        codigo_postal = request.POST.get('codigo_postal', '').strip()
+        ciudad = request.POST.get('ciudad', '').strip()
+        estado = request.POST.get('estado', '').strip()
+        referencias = request.POST.get('referencias', '').strip()
 
-        direccion = request.POST.get(
-            'direccion_entrega', ''
-        ).strip()
-
-        if not direccion or len(direccion) > 1000:
+        # Validar los campos obligatorios.
+        if (
+            not calle
+            or not numero_exterior
+            or not colonia
+            or not ciudad
+            or not estado
+            or len(codigo_postal) != 5
+            or not codigo_postal.isdigit()
+            or len(calle) > 150
+            or len(numero_exterior) > 20
+            or len(numero_interior) > 20
+            or len(colonia) > 100
+            or len(ciudad) > 100
+            or len(estado) > 100
+            or len(referencias) > 500
+        ):
             messages.error(
                 request,
-                'Ingresa una dirección válida '
-                'de hasta 1000 caracteres.'
+                'Revisa los datos de tu dirección. '
+                'Todos los campos obligatorios deben ser válidos.'
             )
 
             return render(
@@ -508,6 +529,24 @@ def checkout(request):
                     'checkout_token': checkout_token
                 }
             )
+
+        # Unir los datos para guardarlos en el campo existente.
+        direccion = (
+            f'Calle: {calle}, '
+            f'Número exterior: {numero_exterior}, '
+            f'Colonia: {colonia}, '
+            f'Código postal: {codigo_postal}, '
+            f'Ciudad: {ciudad}, '
+            f'Estado: {estado}'
+        )
+
+        if numero_interior:
+            direccion += f', Número interior: {numero_interior}'
+
+        if referencias:
+            direccion += f', Referencias: {referencias}'
+
+           
 
         # Comprobar el importe mostrado al cliente.
         total_mostrado = request.session.get(
