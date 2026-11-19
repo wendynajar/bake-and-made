@@ -21,6 +21,7 @@ from .models import (
     PLAN_SWEET,
     CategoriaIngrediente,
     CupcakePersonalizado,
+    ErrorPedido,
     ExperienciaQR,
     Ingrediente,
     Menu,
@@ -187,6 +188,286 @@ class CheckoutVistaTests(TestCase):
         self.client.post(reverse('checkout'), datos)
 
         self.assertEqual(Pedido.objects.count(), 1)
+
+
+class CarritoConCupcakesMixin:
+    """Usuario con sesión, un Brownie de $45 e ingredientes que suman un cupcake de $49."""
+
+    def setUp(self) -> None:
+        self.usuario = User.objects.create_user('dani', password='clave-segura-123')
+        self.client.force_login(self.usuario)
+        self.producto = Menu.objects.create(
+            nombre_producto='Brownie', descripcion='-', precio_base=Decimal('45.00'), stock=5
+        )
+        precios = {'Base': '0.00', 'Relleno': '5.00', 'Cobertura': '7.00', 'Topping': '2.00'}
+        self.ingredientes = {}
+        for categoria, precio in precios.items():
+            self.ingredientes[categoria.lower()] = Ingrediente.objects.create(
+                categoria=CategoriaIngrediente.objects.create(nombre=categoria),
+                nombre=f'{categoria} de prueba',
+                precio_adicional=Decimal(precio),
+                stock_disponible=10,
+            )
+        # $35 + 0 + 5 + 7 + 2
+        self.precio_cupcake = Decimal('49.00')
+
+    def cupcake(self, cantidad: int = 1, **cambios: Any) -> dict[str, Any]:
+        datos = {
+            'tipo': 'cupcake_personalizado',
+            'nombre': 'Cupcake personalizado',
+            'ingredientes': {
+                slug: {'id': ingrediente.pk, 'nombre': ingrediente.nombre}
+                for slug, ingrediente in self.ingredientes.items()
+            },
+            'dietas': ['vegano', 'inventada'],
+            'color_frosting': 'rosa',
+            'precio_unitario': str(self.precio_cupcake),
+            'cantidad': cantidad,
+        }
+        datos.update(cambios)
+        return datos
+
+    def con_carrito(self, personalizados: list[dict[str, Any]], productos: int = 0) -> None:
+        sesion = self.client.session
+        sesion['carrito'] = {str(self.producto.pk): productos} if productos else {}
+        sesion['carrito_personalizados'] = personalizados
+        sesion.save()
+
+    def comprar(self) -> Any:
+        self.client.get(reverse('checkout'))
+        return self.client.post(reverse('checkout'), {
+            'checkout_token': self.client.session.get('checkout_token', ''),
+            'direccion_entrega': 'Calle 3',
+        })
+
+    def stock(self, slug: str) -> int:
+        return Ingrediente.objects.get(pk=self.ingredientes[slug].pk).stock_disponible
+
+
+class CheckoutPersonalizadosTests(CarritoConCupcakesMixin, TestCase):
+    """Checkout de cupcakes personalizados (hallazgos #7 y #8, fase 6)."""
+
+    def test_solo_personalizados_crea_el_pedido(self) -> None:
+        self.con_carrito([self.cupcake(cantidad=2)])
+
+        respuesta = self.comprar()
+
+        pedido = Pedido.objects.get()
+        self.assertRedirects(respuesta, reverse('pedido_confirmado', args=[pedido.pk]))
+        self.assertEqual(pedido.total, Decimal('98.00'))
+        detalle = pedido.detallepedido_set.get()
+        self.assertEqual(detalle.cantidad, 2)
+        self.assertEqual(detalle.precio_unitario, self.precio_cupcake)
+        cupcake = detalle.cupcake_custom
+        self.assertEqual(cupcake.usuario, self.usuario)
+        self.assertEqual(cupcake.precio_calculado, self.precio_cupcake)
+        self.assertEqual(cupcake.dietas, ['vegano'])
+        self.assertEqual(cupcake.color_frosting, 'rosa')
+        self.assertEqual(
+            set(cupcake.ingredientes.values_list('pk', flat=True)),
+            {i.pk for i in self.ingredientes.values()},
+        )
+
+    def test_descuenta_stock_de_ingredientes_y_vacia_ambos_carritos(self) -> None:
+        self.con_carrito([self.cupcake(cantidad=2), self.cupcake(cantidad=1)], productos=1)
+
+        self.comprar()
+
+        for slug in self.ingredientes:
+            self.assertEqual(self.stock(slug), 7)
+        self.assertEqual(self.client.session['carrito'], {})
+        self.assertEqual(self.client.session['carrito_personalizados'], [])
+
+    def test_mezcla_productos_y_personalizados(self) -> None:
+        self.con_carrito([self.cupcake()], productos=2)
+
+        self.comprar()
+
+        pedido = Pedido.objects.get()
+        self.assertEqual(pedido.total, Decimal('90.00') + self.precio_cupcake)
+        self.assertEqual(pedido.detallepedido_set.count(), 2)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock, 3)
+
+    def test_el_precio_de_la_sesion_no_se_usa_para_cobrar(self) -> None:
+        self.con_carrito([self.cupcake(precio_unitario='1.00')])
+
+        respuesta = self.client.get(reverse('checkout'))
+
+        self.assertEqual(respuesta.context['total'], self.precio_cupcake)
+
+    def rechaza_sin_cambios(self, mensaje: str) -> None:
+        respuesta = self.comprar()
+        self.assertFalse(Pedido.objects.exists())
+        self.assertFalse(CupcakePersonalizado.objects.exists())
+        self.assertEqual(self.stock('base'), 10)
+        self.assertRedirects(respuesta, reverse('ver_carrito'), fetch_redirect_response=False)
+        mensajes = [str(m) for m in self.client.get(reverse('ver_carrito')).context['messages']]
+        self.assertTrue(any(mensaje in m for m in mensajes), mensajes)
+
+    def test_ingrediente_desactivado(self) -> None:
+        self.con_carrito([self.cupcake()])
+        Ingrediente.objects.filter(pk=self.ingredientes['relleno'].pk).update(activo=False)
+        self.rechaza_sin_cambios('relleno de tu cupcake ya no está disponible')
+
+    def test_ingrediente_exclusivo_sin_sweet(self) -> None:
+        self.con_carrito([self.cupcake()])
+        Ingrediente.objects.filter(pk=self.ingredientes['topping'].pk).update(solo_suscriptores=True)
+        self.rechaza_sin_cambios('topping de tu cupcake ya no está disponible')
+
+    def test_ingrediente_exclusivo_con_sweet_si_se_vende(self) -> None:
+        Suscripcion.contratar_mes(self.usuario)
+        Ingrediente.objects.filter(pk=self.ingredientes['topping'].pk).update(solo_suscriptores=True)
+        self.con_carrito([self.cupcake()])
+        self.comprar()
+        self.assertTrue(Pedido.objects.exists())
+
+    def test_ingrediente_de_otra_categoria(self) -> None:
+        cupcake = self.cupcake()
+        cupcake['ingredientes']['base'] = {'id': self.ingredientes['topping'].pk, 'nombre': 'x'}
+        self.con_carrito([cupcake])
+        self.rechaza_sin_cambios('base de tu cupcake ya no está disponible')
+
+    def test_stock_insuficiente_entre_varios_cupcakes(self) -> None:
+        Ingrediente.objects.filter(pk=self.ingredientes['base'].pk).update(stock_disponible=2)
+        self.con_carrito([self.cupcake(cantidad=2), self.cupcake(cantidad=1)])
+
+        respuesta = self.comprar()
+
+        self.assertFalse(Pedido.objects.exists())
+        self.assertEqual(self.stock('base'), 2)
+        self.assertEqual(self.stock('relleno'), 10)
+        self.assertRedirects(respuesta, reverse('ver_carrito'), fetch_redirect_response=False)
+
+    def test_datos_corruptos_en_la_sesion(self) -> None:
+        for corrupto in ('texto', {'ingredientes': 'x'}, self.cupcake(cantidad=0)):
+            with self.subTest(corrupto=corrupto):
+                self.con_carrito([corrupto])
+                self.rechaza_sin_cambios('no es válido')
+
+    def test_el_modelo_rechaza_un_carrito_vacio(self) -> None:
+        with self.assertRaises(ErrorPedido):
+            Pedido.objects.crear_desde_carrito(
+                usuario=self.usuario, carrito={}, direccion='x',
+                checkout_token=uuid.uuid4(), total_esperado=Decimal('0'), personalizados=[],
+            )
+
+
+class CheckoutVIPTests(CarritoConCupcakesMixin, TestCase):
+    """Checkout con el descuento VIP (fase 7): se cobra y se guarda lo descontado."""
+
+    def hacer_sweet(self) -> None:
+        Suscripcion.contratar_mes(self.usuario)
+
+    def test_sweet_guarda_descuento_y_precios_descontados(self) -> None:
+        self.hacer_sweet()
+        # Brownie $45 x2 -> $36 c/u; cupcake $49 -> $39.20
+        self.con_carrito([self.cupcake()], productos=2)
+
+        self.comprar()
+
+        pedido = Pedido.objects.get()
+        self.assertEqual(pedido.descuento_porcentaje, Decimal('0.20'))
+        self.assertEqual(pedido.motivo_descuento, Pedido.MOTIVO_VIP)
+        self.assertEqual(pedido.total, Decimal('111.20'))
+        precios = {
+            'producto' if d.menu_item_id else 'cupcake': d.precio_unitario
+            for d in pedido.detallepedido_set.all()
+        }
+        self.assertEqual(precios, {'producto': Decimal('36.00'), 'cupcake': Decimal('39.20')})
+        self.assertEqual(
+            sum(d.precio_unitario * d.cantidad for d in pedido.detallepedido_set.all()),
+            pedido.total,
+        )
+        # El cupcake conserva su precio base calculado; lo cobrado está en la línea.
+        self.assertEqual(CupcakePersonalizado.objects.get().precio_calculado, Decimal('49.00'))
+
+    def test_cumpleanios_cobra_50(self) -> None:
+        self.hacer_sweet()
+        hoy = timezone.localdate()
+        PerfilVIP.objects.create(
+            usuario=self.usuario,
+            fecha_nacimiento=hoy.replace(year=1995) if (hoy.month, hoy.day) != (2, 29)
+            else datetime.date(1996, 2, 29),
+            cumple_registrado_en=hoy - datetime.timedelta(days=30),
+        )
+        self.con_carrito([self.cupcake()])
+
+        self.comprar()
+
+        pedido = Pedido.objects.get()
+        self.assertEqual(pedido.descuento_porcentaje, Decimal('0.50'))
+        self.assertEqual(pedido.motivo_descuento, Pedido.MOTIVO_CUMPLEANIOS)
+        self.assertEqual(pedido.total, Decimal('24.50'))
+
+    def test_basic_sin_descuento(self) -> None:
+        self.con_carrito([self.cupcake()], productos=1)
+
+        self.comprar()
+
+        pedido = Pedido.objects.get()
+        self.assertEqual(pedido.descuento_porcentaje, Decimal('0'))
+        self.assertEqual(pedido.motivo_descuento, '')
+        self.assertEqual(pedido.total, Decimal('94.00'))
+
+    def test_desglose_en_el_checkout_y_en_la_confirmacion(self) -> None:
+        self.hacer_sweet()
+        self.con_carrito([self.cupcake()], productos=2)
+
+        resumen = self.client.get(reverse('checkout'))
+
+        self.assertEqual(resumen.context['subtotal'], Decimal('139.00'))
+        self.assertEqual(resumen.context['ahorro'], Decimal('27.80'))
+        self.assertEqual(resumen.context['total'], Decimal('111.20'))
+        self.assertContains(resumen, 'Descuento VIP')
+
+        respuesta = self.client.post(reverse('checkout'), {
+            'checkout_token': self.client.session['checkout_token'],
+            'direccion_entrega': 'Calle 3',
+        }, follow=True)
+        self.assertContains(respuesta, 'Descuento aplicado')
+        self.assertContains(respuesta, 'VIP')
+        self.assertContains(respuesta, '−20 %')
+
+    def test_token_reutilizado_no_duplica_el_pedido(self) -> None:
+        self.hacer_sweet()
+        self.con_carrito([self.cupcake()])
+        self.client.get(reverse('checkout'))
+        datos = {'checkout_token': self.client.session['checkout_token'], 'direccion_entrega': 'x'}
+
+        self.client.post(reverse('checkout'), datos)
+        self.con_carrito([self.cupcake()])
+        self.client.post(reverse('checkout'), datos)
+
+        self.assertEqual(Pedido.objects.count(), 1)
+
+    def test_si_el_descuento_cambia_entre_get_y_post_no_cobra(self) -> None:
+        self.hacer_sweet()
+        self.con_carrito([self.cupcake()])
+        self.client.get(reverse('checkout'))
+        token = self.client.session['checkout_token']
+
+        # El Sweet vence antes de confirmar: el total cambia de $39.20 a $49.00.
+        Suscripcion.objects.filter(usuario=self.usuario).update(
+            fecha_fin=timezone.localdate() - datetime.timedelta(days=1)
+        )
+        respuesta = self.client.post(reverse('checkout'), {
+            'checkout_token': token, 'direccion_entrega': 'x',
+        })
+
+        self.assertRedirects(respuesta, reverse('checkout'), fetch_redirect_response=False)
+        self.assertFalse(Pedido.objects.exists())
+
+    def test_el_modelo_valida_descuento_y_motivo(self) -> None:
+        argumentos = {
+            'usuario': self.usuario, 'carrito': {str(self.producto.pk): 1},
+            'direccion': 'x', 'checkout_token': uuid.uuid4(), 'total_esperado': Decimal('45.00'),
+        }
+        for descuento, motivo in ((Decimal('1.5'), 'vip'), (Decimal('0.20'), ''), (Decimal('0'), 'vip'),
+                                  (Decimal('0.20'), 'inventado')):
+            with self.subTest(descuento=descuento, motivo=motivo), self.assertRaises(ValueError):
+                Pedido.objects.crear_desde_carrito(**argumentos, descuento=descuento, motivo=motivo)
+        self.assertFalse(Pedido.objects.exists())
 
 
 class PaginasPublicasTests(TestCase):
@@ -388,7 +669,7 @@ class TiendaVIPTests(TestCase):
     def test_basic_ve_la_tienda_como_hoy(self) -> None:
         self.client.force_login(self.usuario)
         respuesta = self.client.get(reverse('inicio'))
-        self.assertNotContains(respuesta, 'Membresía VIP')
+        self.assertNotContains(respuesta, 'class="nav-vip"')
         self.assertNotContains(respuesta, '<del')
         self.assertEqual(self.carrito().context['total'], Decimal('135.00'))
 
@@ -398,10 +679,25 @@ class TiendaVIPTests(TestCase):
 
         respuesta = self.client.get(reverse('inicio'))
 
-        self.assertContains(respuesta, 'Membresía VIP')
-        self.assertContains(respuesta, 'VIP −20 %')
+        self.assertContains(respuesta, 'class="nav-vip">VIP</a>')
+        self.assertNotContains(respuesta, 'Membresía VIP')
+        self.assertNotContains(respuesta, 'VIP −20 %')
         self.assertContains(respuesta, '<del aria-label="Precio normal">$100.00</del>')
         self.assertContains(respuesta, '$80.00 MXN')
+
+    def test_pestana_vip_va_entre_el_carrito_y_el_saludo(self) -> None:
+        Suscripcion.contratar_mes(self.usuario)
+        self.client.force_login(self.usuario)
+
+        for pagina in ('inicio', 'ver_carrito', 'suscripcion'):
+            with self.subTest(pagina=pagina):
+                html = self.client.get(reverse(pagina)).content.decode()
+                nav = html[html.index('<nav class="premium-nav"'):html.index('</nav>')]
+                carrito = nav.index(reverse('ver_carrito'))
+                vip = nav.index('class="nav-vip"')
+                saludo = nav.index('user-greeting')
+                self.assertLess(carrito, vip)
+                self.assertLess(vip, saludo)
 
     def test_cumpleanios_muestra_50(self) -> None:
         Suscripcion.contratar_mes(self.usuario)
@@ -417,7 +713,7 @@ class TiendaVIPTests(TestCase):
         respuesta = self.carrito()
 
         self.assertEqual(respuesta.context['total'], Decimal('67.50'))
-        self.assertContains(respuesta, 'Cumpleaños −50 %')
+        self.assertTrue(respuesta.context['vip_es_cumpleanios'])
 
     def test_el_plan_se_consulta_una_sola_vez_por_peticion(self) -> None:
         Suscripcion.contratar_mes(self.usuario)

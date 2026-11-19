@@ -120,6 +120,16 @@
                 <strong>#{{ pedido.id }}</strong>
             </div>
 
+            {% if pedido.motivo_descuento %}
+                <div class="fila">
+                    <span>Descuento aplicado</span>
+                    <strong>
+                        {{ pedido.get_motivo_descuento_display }}
+                        −{% widthratio pedido.descuento_porcentaje 1 100 %} %
+                    </strong>
+                </div>
+            {% endif %}
+
             <div class="fila">
                 <span>Total de productos</span>
                 <strong>${{ pedido.total|floatformat:2 }} MXN</strong>

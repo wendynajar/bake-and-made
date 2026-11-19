@@ -8,3 +8,4 @@ dj-database-url>=2.3
 psycopg[binary]>=3.2
 python-dotenv>=1.0
 django-storages[s3]>=1.14
+segno>=1.6

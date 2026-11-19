@@ -23,6 +23,7 @@ python manage.py test               # tests de tienda y usuarios
 - `bakeandmade/bakeandmade/settings.py`: toda la configuración se lee de variables de entorno (python-dotenv). WhiteNoise sirve los estáticos y S3 guarda las imágenes subidas (`/media`) si se define `AWS_STORAGE_BUCKET_NAME`.
 - `bakeandmade/bakeandmade/urls.py`: hace `include()` de `usuarios.urls` y `tienda.urls`.
 - `bakeandmade/usuarios/`: registro, login y logout con el `User` nativo; `PerfilVIP` (teléfono y cumpleaños, `PerfilVIP.de(usuario)`, `.registrar_cumpleanios()`, `.es_cumpleanios()`, `.descuento_vigente()`: **única fuente de la regla de descuento**). Comando `crear_usuarios_demo` (requiere `DEMO_PASSWORD` y `--uids` o `DEMO_VIP_UIDS`).
+- `bakeandmade/usuarios/views_vip.py`: página `/vip/` (solo Sweet vigente), APIs `/api/vip/fechas/` (GET/POST), `/api/vip/fechas/<id>/` (DELETE), `/api/vip/cumpleanios/` (POST) y `/vip/v/<codigo>/` (pública: redirige a la URL firmada del video en S3). El calendario usa FullCalendar 6.1.15 por CDN y el QR se genera con `segno`.
 - `bakeandmade/iot/`: `TarjetaRFID` (inventario, `.objects.libres()`, `.entregar_a()`, UID normalizado con `normalizar_uid`), `Terminal` (`.registrar_lectura()`, `.activar/rechazar/salir()`, `.expirar_si_inactiva()`) y `LecturaRFID`.
   - `iot/sesion.py`: `sincronizar(request, terminal)` inicia o cierra la sesión del kiosco según la terminal, conservando carrito y terminal. Cualquier cierre de sesión en un kiosco debe pasar por aquí (lo usa `usuarios.views.CerrarSesionView`).
   - `iot/middleware.py`: `ActividadKioscoMiddleware` (solo las páginas navegadas cuentan como actividad; `/api/` no).
@@ -33,11 +34,11 @@ python manage.py test               # tests de tienda y usuarios
   - `Ingrediente.objects.de_categoria().visibles_para(usuario)`
   - `descuento_para(usuario, hoy)` y `aplicar_descuento(precio, descuento)`: todo precio con descuento VIP pasa por aquí (Decimal, redondeo por línea)
   - `Menu.objects.en_venta()`, `Menu.admite_cantidad()`
-  - `Pedido.objects.lineas_validas()`, `.crear_desde_carrito()` (atómico, con `F()` y token único)
+  - `Pedido.objects.lineas_validas()`, `.personalizados_validos()`, `.total_de(lineas, descuento)`, `.crear_desde_carrito()` (atómico, con `F()` y token único; guarda `CupcakePersonalizado` + `CupcakeIngredientes`, descuenta el stock de productos e ingredientes y registra `descuento_porcentaje`/`motivo_descuento` con `DetallePedido.precio_unitario` ya descontado)
   - `CupcakePersonalizado.PASOS`, `.calcular_precio()`, `.DIETAS`, `.COLORES_FROSTING`
 - `bakeandmade/tienda/carrito.py`: claves y lectura del carrito en la sesión.
 - `bakeandmade/tienda/peticion.py`: `plan_de_peticion()` y `descuento_de_peticion()` calculan plan y descuento **una vez por petición**; vistas y context processors deben usarlas en vez de llamar a `plan_de()` directo.
-- Plantillas: las páginas no heredan de `base.html` (cada una repite su encabezado). Lo común va en fragmentos incluidos en todas: `tienda/_vip_nav.html` (pestaña y etiqueta VIP, antes de `</nav>`) e `iot/_kiosco.html` (polling y barra del kiosco, antes de `</body>`). Contexto VIP y de kiosco en `usuarios.context_processors.vip`.
+- Plantillas: las páginas no heredan de `base.html` (cada una repite su encabezado). Lo común va en fragmentos incluidos en todas: `tienda/_vip_nav.html` (pestaña "VIP", entre el carrito y el saludo) e `iot/_kiosco.html` (polling y barra del kiosco, antes de `</body>`). Contexto VIP y de kiosco en `usuarios.context_processors.vip`.
 - `bakeandmade/tienda/views.py`: vistas delgadas (HTTP → modelos → plantilla/redirect).
 
 ## Reglas (de ARCHITECTURE.md)
@@ -49,7 +50,7 @@ python manage.py test               # tests de tienda y usuarios
 - Código, nombres y textos de la interfaz en español.
 
 ## Cuidado
-- El checkout **no** procesa `carrito_personalizados` todavía (hallazgo #7 en el análisis).
+- El checkout procesa productos y cupcakes personalizados. Los precios e ingredientes de la sesión **nunca** se usan para cobrar: `Pedido.objects.personalizados_validos()` los vuelve a validar contra la BD.
 - Los nombres de URL no tienen namespace porque las plantillas usan `{% url 'inicio' %}`. Mantenlos así o actualiza todas las plantillas.
 - Si cambias dependencias, actualiza **a la vez** `requirements.txt` (lo usa Render) y `Pipfile` (desarrollo).
 - Capa IoT/VIP decidida: seguir [docs/IOT_VIP_SPEC.md](docs/IOT_VIP_SPEC.md). Se implementa **una fase a la vez** en la rama `feat/iot-vip`; cada fase termina con `python manage.py test` en verde y un commit. No avances a la siguiente fase sin indicación.

@@ -1,0 +1,238 @@
+/* Página de la membresía VIP. Usa los tokens de premium.css (--wine, --rose, --gold...). */
+
+.vip-page {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 64px 5% 90px;
+}
+
+.vip-hero h1 {
+    margin: 8px 0 18px;
+    font-family: 'Playfair Display', serif;
+    color: var(--wine);
+}
+
+.vip-felicitacion {
+    display: inline-block;
+    margin: 0 0 20px;
+    padding: 12px 18px;
+    border: 1px solid var(--rose);
+    border-radius: 14px;
+    background: var(--rose-light);
+    color: var(--wine);
+    font-weight: 600;
+}
+
+.vip-resumen {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin: 0;
+}
+
+.vip-resumen div {
+    padding: 18px 20px;
+    border: 1px solid #efd9de;
+    border-radius: 16px;
+    background: #fffaf8;
+}
+
+.vip-resumen dt {
+    color: #785761;
+    font-size: 12px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.vip-resumen dd {
+    margin: 6px 0 0;
+    color: var(--wine);
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.vip-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+    margin-top: 36px;
+}
+
+.vip-card {
+    padding: 28px;
+    border: 1px solid #efd9de;
+    border-radius: 20px;
+    background: #fff;
+    box-shadow: 0 12px 32px rgba(88, 38, 57, .06);
+}
+
+.vip-card-ancha {
+    grid-column: 1 / -1;
+}
+
+.vip-card h2 {
+    margin: 0 0 12px;
+    font-family: 'Playfair Display', serif;
+    color: var(--wine);
+}
+
+.vip-dato {
+    margin: 0;
+    color: var(--wine);
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.vip-nota {
+    color: #785761;
+    font-size: 14px;
+}
+
+.vip-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 360px;
+}
+
+.vip-form-fila {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    max-width: none;
+    margin-bottom: 8px;
+}
+
+.vip-form-fila > div {
+    display: flex;
+    flex: 1 1 180px;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.vip-form label {
+    color: #785761;
+    font-size: 13px;
+}
+
+.vip-form input,
+.vip-form select {
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid #e5cdd3;
+    border-radius: 12px;
+    background: #fffaf8;
+    color: var(--ink);
+    font: inherit;
+}
+
+.vip-boton {
+    min-height: 44px;
+    padding: 0 22px;
+    border: 0;
+    border-radius: 30px;
+    background: var(--wine);
+    color: var(--cream);
+    font: 700 14px 'DM Sans', sans-serif;
+    cursor: pointer;
+}
+
+.vip-boton-secundario {
+    border: 1px solid var(--wine);
+    background: transparent;
+    color: var(--wine);
+}
+
+.vip-boton:focus-visible,
+.vip-form input:focus-visible,
+.vip-form select:focus-visible {
+    outline: 3px solid var(--gold);
+    outline-offset: 2px;
+}
+
+.vip-error {
+    flex-basis: 100%;
+    margin: 0;
+    color: #b0284f;
+    font-size: 14px;
+}
+
+.vip-qr svg {
+    display: block;
+    width: min(220px, 100%);
+    height: auto;
+}
+
+.vip-enlace {
+    color: var(--wine);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.vip-mensaje {
+    margin: 16px 0 0;
+    padding-left: 14px;
+    border-left: 3px solid var(--gold);
+    color: var(--ink);
+    font-style: italic;
+}
+
+.vip-calendario {
+    margin-top: 12px;
+    --fc-border-color: #f0e6e3;
+    --fc-today-bg-color: #fdf0f2;
+    --fc-button-bg-color: var(--wine);
+    --fc-button-border-color: var(--wine);
+    --fc-button-active-bg-color: #3f1a29;
+    --fc-event-bg-color: var(--rose);
+    --fc-event-border-color: var(--rose);
+}
+
+.vip-calendario .vip-evento-mi-cumple {
+    --fc-event-bg-color: var(--gold);
+    background: var(--gold);
+    border-color: var(--gold);
+}
+
+.vip-calendario .fc-event {
+    cursor: pointer;
+}
+
+.vip-calendario .vip-evento-mi-cumple.fc-event {
+    cursor: default;
+}
+
+.vip-dialogo {
+    max-width: min(440px, calc(100vw - 32px));
+    padding: 28px;
+    border: 1px solid var(--gold);
+    border-radius: 18px;
+    background: var(--cream);
+    color: var(--wine);
+}
+
+.vip-dialogo::backdrop {
+    background: rgba(52, 34, 42, .45);
+}
+
+.vip-dialogo p {
+    margin: 0 0 20px;
+    font-size: 17px;
+    line-height: 1.5;
+}
+
+.vip-dialogo-acciones {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+@media (max-width: 760px) {
+    .vip-page {
+        padding: 40px 16px 72px;
+    }
+
+    .vip-grid {
+        grid-template-columns: 1fr;
+    }
+}

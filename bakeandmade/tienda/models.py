@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime
 import secrets
 import uuid
-from calendar import monthrange
+from calendar import isleap, monthrange
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
@@ -20,6 +20,7 @@ from typing import Any
 from django.apps import apps
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import AnonymousUser, User
+from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.db.models import F
 from django.utils import timezone
@@ -186,12 +187,49 @@ class Suscripcion(models.Model):
         self.save(update_fields=['estado'])
 
 
+def misma_fecha_en_anio(fecha: datetime.date, anio: int) -> datetime.date:
+    """La fecha en otro año; el 29 de febrero cae el 28 en años no bisiestos."""
+    if (fecha.month, fecha.day) == (2, 29) and not isleap(anio):
+        return datetime.date(anio, 2, 28)
+    return fecha.replace(year=anio)
+
+
+class RecordatorioQuerySet(models.QuerySet['RecordatorioEvento']):
+    """Consultas del calendario VIP; siempre filtradas por el dueño."""
+
+    def de(self, usuario: User) -> RecordatorioQuerySet:
+        """Solo las fechas del usuario: nadie ve ni borra las de otro."""
+        return self.filter(usuario=usuario)
+
+    def ocurrencias(
+        self, desde: datetime.date, hasta: datetime.date
+    ) -> list[tuple[RecordatorioEvento, datetime.date]]:
+        """(evento, fecha) de cada aparición dentro de [desde, hasta).
+
+        Los eventos que se repiten cada año aparecen una vez por año del rango,
+        así el calendario los muestra sin que el usuario los capture de nuevo.
+        """
+        resultado = []
+        for evento in self.order_by('fecha_evento', 'pk'):
+            if not evento.se_repite_cada_anio:
+                if desde <= evento.fecha_evento < hasta:
+                    resultado.append((evento, evento.fecha_evento))
+                continue
+            for anio in range(max(desde.year, evento.fecha_evento.year), hasta.year + 1):
+                dia = misma_fecha_en_anio(evento.fecha_evento, anio)
+                if desde <= dia < hasta:
+                    resultado.append((evento, dia))
+        return resultado
+
+
 class RecordatorioEvento(models.Model):
     """Fecha especial del cliente, mostrada en el calendario de la página VIP.
 
     `tipo` y `se_repite_cada_anio` permiten pintar cumpleaños y aniversarios
     cada año sin que el usuario los vuelva a capturar.
     """
+
+    LONGITUD_NOMBRE = 100
 
     CUMPLEANIOS = 'cumpleanios'
     ANIVERSARIO = 'aniversario'
@@ -209,8 +247,40 @@ class RecordatorioEvento(models.Model):
     tipo = models.CharField(max_length=20, choices=TIPOS, default=OTRO)
     se_repite_cada_anio = models.BooleanField(default=False)
 
+    objects = RecordatorioQuerySet.as_manager()
+
     def __str__(self) -> str:
         return f"{self.nombre_evento} ({self.fecha_evento})"
+
+    @classmethod
+    def crear_para(cls, usuario: User, nombre: Any, fecha: Any, tipo: Any) -> RecordatorioEvento:
+        """Valida los datos del calendario y crea la fecha del usuario.
+
+        Recibe valores crudos del navegador y lanza ValidationError con mensajes
+        para el cliente. Cumpleaños y aniversarios se repiten cada año.
+        """
+        errores: dict[str, str] = {}
+        nombre = nombre.strip() if isinstance(nombre, str) else ''
+        if not nombre or len(nombre) > cls.LONGITUD_NOMBRE:
+            errores['nombre_evento'] = f'Escribe un nombre de 1 a {cls.LONGITUD_NOMBRE} caracteres.'
+        try:
+            fecha = datetime.date.fromisoformat(fecha) if isinstance(fecha, str) else None
+        except ValueError:
+            fecha = None
+        if fecha is None:
+            errores['fecha_evento'] = 'Elige una fecha válida.'
+        if tipo not in dict(cls.TIPOS):
+            errores['tipo'] = 'Elige un tipo de fecha válido.'
+        if errores:
+            raise ValidationError(errores)
+
+        return cls.objects.create(
+            usuario=usuario,
+            nombre_evento=nombre,
+            fecha_evento=fecha,
+            tipo=tipo,
+            se_repite_cada_anio=tipo in (cls.CUMPLEANIOS, cls.ANIVERSARIO),
+        )
 
 
 # =============================================================================
@@ -366,6 +436,9 @@ class CupcakePersonalizado(models.Model):
     nombre_custom = models.CharField(max_length=100, blank=True, null=True)
     precio_calculado = models.DecimalField(max_digits=10, decimal_places=2)
     ingredientes = models.ManyToManyField(Ingrediente, through='CupcakeIngredientes')
+    # Se guardan con el pedido porque la cocina los necesita para prepararlo.
+    dietas = models.JSONField(default=list, blank=True)
+    color_frosting = models.CharField(max_length=20, blank=True)
 
     def __str__(self) -> str:
         return self.nombre_custom or f"Cupcake Custom #{self.id}"
@@ -440,18 +513,91 @@ class LineaCarrito:
     cantidad: int
 
     @property
-    def subtotal(self) -> Decimal:
-        """Precio del producto por la cantidad."""
-        return self.producto.precio_base * self.cantidad
+    def precio_unitario(self) -> Decimal:
+        """Precio base del producto, sin descuento."""
+        return self.producto.precio_base
 
-    def as_dict(self) -> dict[str, Any]:
-        """Representación para las plantillas existentes."""
+    @property
+    def subtotal(self) -> Decimal:
+        """Precio del producto por la cantidad, sin descuento."""
+        return self.precio_unitario * self.cantidad
+
+    def subtotal_con_descuento(self, descuento: Decimal) -> Decimal:
+        """Subtotal cobrado: precio unitario redondeado con descuento por la cantidad."""
+        return aplicar_descuento(self.precio_unitario, descuento) * self.cantidad
+
+    def as_dict(self, descuento: Decimal = Decimal('0')) -> dict[str, Any]:
+        """Representación para las plantillas, con precio base y precio final."""
         return {
             'tipo': 'normal',
             'producto': self.producto,
             'cantidad': self.cantidad,
-            'subtotal': self.subtotal,
+            'precio_base': self.precio_unitario,
+            'precio_unitario': aplicar_descuento(self.precio_unitario, descuento),
+            'subtotal_base': self.subtotal,
+            'subtotal': self.subtotal_con_descuento(descuento),
         }
+
+
+@dataclass(frozen=True)
+class LineaPersonalizada:
+    """Cupcake personalizado del carrito, con ingredientes verificados contra la BD.
+
+    El precio se recalcula con los ingredientes actuales; nunca se usa el precio
+    guardado en la sesión.
+    """
+
+    nombre: str
+    ingredientes: tuple[tuple[PasoCupcake, Ingrediente], ...]
+    dietas: tuple[str, ...]
+    color_frosting: str
+    cantidad: int
+
+    @property
+    def precio_unitario(self) -> Decimal:
+        """$35 más los extras de los ingredientes (CupcakePersonalizado.calcular_precio)."""
+        return CupcakePersonalizado.calcular_precio(ing for _, ing in self.ingredientes)
+
+    @property
+    def subtotal(self) -> Decimal:
+        """Precio unitario por la cantidad, sin descuento."""
+        return self.precio_unitario * self.cantidad
+
+    def subtotal_con_descuento(self, descuento: Decimal) -> Decimal:
+        """Subtotal cobrado: precio unitario redondeado con descuento por la cantidad."""
+        return aplicar_descuento(self.precio_unitario, descuento) * self.cantidad
+
+    def as_dict(self, descuento: Decimal = Decimal('0')) -> dict[str, Any]:
+        """Representación para las plantillas, con precio base y precio final."""
+        return {
+            'tipo': 'personalizado',
+            'nombre': self.nombre,
+            'ingredientes': [
+                {'paso': paso.nombre, 'nombre': ingrediente.nombre}
+                for paso, ingrediente in self.ingredientes
+            ],
+            'cantidad': self.cantidad,
+            'precio_base': self.precio_unitario,
+            'precio_unitario': aplicar_descuento(self.precio_unitario, descuento),
+            'subtotal_base': self.subtotal,
+            'subtotal': self.subtotal_con_descuento(descuento),
+        }
+
+
+LineaPedido = LineaCarrito | LineaPersonalizada
+
+
+def demanda_de_ingredientes(lineas: Iterable[LineaPersonalizada]) -> dict[int, int]:
+    """Unidades de cada ingrediente que consumen los cupcakes (id → unidades).
+
+    Se agrupa por ingrediente porque dos cupcakes distintos pueden compartirlo y
+    el stock debe alcanzar para ambos.
+    """
+    demanda: dict[int, int] = {}
+    for linea in lineas:
+        for _, ingrediente in linea.ingredientes:
+            demanda[ingrediente.pk] = demanda.get(ingrediente.pk, 0) + linea.cantidad
+    return demanda
 
 
 class PedidoQuerySet(models.QuerySet['Pedido']):
@@ -479,9 +625,80 @@ class PedidoQuerySet(models.QuerySet['Pedido']):
         return lineas
 
     @staticmethod
-    def total_de(lineas: Iterable[LineaCarrito]) -> Decimal:
-        """Suma de subtotales."""
-        return sum((linea.subtotal for linea in lineas), Decimal('0.00'))
+    def personalizados_validos(
+        personalizados: Iterable[Any], usuario: UsuarioOAnonimo
+    ) -> list[LineaPersonalizada]:
+        """Convierte los cupcakes personalizados de la sesión en líneas verificadas.
+
+        La sesión solo se usa para saber qué eligió el cliente: cada ingrediente se
+        vuelve a buscar en la BD y debe seguir activo, ser de la categoría de su
+        paso y ser visible para el usuario (los exclusivos exigen Sweet vigente).
+        También se revisa que haya stock para todos los cupcakes juntos.
+        Lanza ErrorPedido o StockInsuficiente con un mensaje para el cliente.
+        """
+        personalizados = list(personalizados)
+        ids = {
+            dato['id']
+            for cupcake in personalizados
+            if isinstance(cupcake, dict) and isinstance(cupcake.get('ingredientes'), dict)
+            for dato in cupcake['ingredientes'].values()
+            if isinstance(dato, dict) and isinstance(dato.get('id'), int)
+        }
+        disponibles = {
+            ingrediente.pk: ingrediente
+            for ingrediente in Ingrediente.objects.visibles_para(usuario)
+            .filter(activo=True, pk__in=ids)
+            .select_related('categoria')
+        }
+
+        lineas = []
+        for cupcake in personalizados:
+            invalido = ErrorPedido(
+                'Uno de tus cupcakes personalizados no es válido. Elimínalo y ármalo de nuevo.'
+            )
+            if not isinstance(cupcake, dict) or not isinstance(cupcake.get('ingredientes'), dict):
+                raise invalido
+            cantidad = cupcake.get('cantidad', 1)
+            if type(cantidad) is not int or cantidad <= 0:
+                raise invalido
+
+            elegidos = []
+            for paso in CupcakePersonalizado.PASOS:
+                dato = cupcake['ingredientes'].get(paso.slug)
+                ingrediente = disponibles.get(dato.get('id')) if isinstance(dato, dict) else None
+                if ingrediente is None or ingrediente.categoria.nombre.lower() != paso.categoria.lower():
+                    raise ErrorPedido(
+                        f'La opción de {paso.nombre.lower()} de tu cupcake ya no está disponible. '
+                        'Elimínalo del carrito y ármalo de nuevo.'
+                    )
+                elegidos.append((paso, ingrediente))
+
+            dietas = cupcake.get('dietas')
+            color = cupcake.get('color_frosting', '')
+            lineas.append(LineaPersonalizada(
+                nombre=str(cupcake.get('nombre') or 'Cupcake personalizado')[:100],
+                ingredientes=tuple(elegidos),
+                dietas=tuple(CupcakePersonalizado.filtrar_dietas(dietas if isinstance(dietas, list) else [])),
+                color_frosting=color if color in CupcakePersonalizado.COLORES_FROSTING else '',
+                cantidad=cantidad,
+            ))
+
+        for ingrediente_id, unidades in demanda_de_ingredientes(lineas).items():
+            ingrediente = disponibles[ingrediente_id]
+            if ingrediente.stock_disponible < unidades:
+                raise StockInsuficiente(
+                    f'No hay suficiente {ingrediente.nombre} para tus cupcakes personalizados.'
+                )
+        return lineas
+
+    @staticmethod
+    def total_de(lineas: Iterable[LineaPedido], descuento: Decimal = Decimal('0')) -> Decimal:
+        """Total a cobrar: suma de subtotales con descuento (productos y personalizados).
+
+        Se redondea por línea y luego se suma, para que el total coincida con la
+        suma de los `DetallePedido.precio_unitario` guardados.
+        """
+        return sum((linea.subtotal_con_descuento(descuento) for linea in lineas), Decimal('0.00'))
 
     def crear_desde_carrito(
         self,
@@ -491,26 +708,46 @@ class PedidoQuerySet(models.QuerySet['Pedido']):
         direccion: str,
         checkout_token: uuid.UUID | str,
         total_esperado: Decimal,
+        personalizados: Iterable[Any] = (),
+        descuento: Decimal = Decimal('0'),
+        motivo: str = '',
     ) -> Pedido:
         """Registra el pedido y descuenta el stock de forma atómica.
+
+        `descuento` y `motivo` vienen de `descuento_para()` (nunca del navegador):
+        cada `DetallePedido.precio_unitario` guarda el precio ya descontado y el
+        pedido guarda el porcentaje y el motivo para auditar lo cobrado.
 
         Por qué así:
         - Se recalcula el total dentro de la transacción y se rechaza si difiere
           del que vio el cliente (PrecioCambiado).
-        - El stock se descuenta con un UPDATE condicional (`stock >= cantidad`)
-          para evitar sobreventa entre peticiones concurrentes (StockInsuficiente).
+        - El stock de productos e ingredientes se descuenta con UPDATE
+          condicionales (`stock >= cantidad`) para evitar sobreventa entre
+          peticiones concurrentes (StockInsuficiente).
         - `checkout_token` es único: un doble envío del formulario provoca
           IntegrityError en lugar de un pedido duplicado.
+        - Cada cupcake personalizado se guarda como `CupcakePersonalizado` con sus
+          `CupcakeIngredientes`, y su línea apunta a él (`cupcake_custom`).
         """
+        if not Decimal('0') <= descuento < Decimal('1'):
+            raise ValueError(f'Descuento fuera de rango: {descuento}')
+        if motivo not in dict(Pedido.MOTIVOS_DESCUENTO) or (descuento > 0) != bool(motivo):
+            raise ValueError(f'Motivo de descuento inválido: {motivo!r}')
+
         with transaction.atomic():
             lineas = self.lineas_validas(carrito)
-            total = self.total_de(lineas)
+            personalizadas = self.personalizados_validos(personalizados, usuario)
+            if not lineas and not personalizadas:
+                raise ErrorPedido('Tu carrito está vacío.')
+            total = self.total_de([*lineas, *personalizadas], descuento)
             if total != total_esperado:
                 raise PrecioCambiado('Los precios cambiaron. Revisa nuevamente tu pedido.')
 
             pedido = self.create(
                 usuario=usuario,
                 total=total,
+                descuento_porcentaje=descuento,
+                motivo_descuento=motivo,
                 direccion_entrega=direccion,
                 estado_pedido=Pedido.PENDIENTE,
                 checkout_token=checkout_token,
@@ -533,9 +770,46 @@ class PedidoQuerySet(models.QuerySet['Pedido']):
                     pedido=pedido,
                     menu_item=linea.producto,
                     cantidad=linea.cantidad,
-                    precio_unitario=linea.producto.precio_base,
+                    precio_unitario=aplicar_descuento(linea.precio_unitario, descuento),
+                )
+
+            self._descontar_ingredientes(personalizadas)
+            for linea in personalizadas:
+                cupcake = CupcakePersonalizado.objects.create(
+                    usuario=usuario,
+                    nombre_custom=linea.nombre,
+                    precio_calculado=linea.precio_unitario,
+                    dietas=list(linea.dietas),
+                    color_frosting=linea.color_frosting,
+                )
+                CupcakeIngredientes.objects.bulk_create(
+                    CupcakeIngredientes(cupcake=cupcake, ingrediente=ingrediente)
+                    for _, ingrediente in linea.ingredientes
+                )
+                DetallePedido.objects.create(
+                    pedido=pedido,
+                    cupcake_custom=cupcake,
+                    cantidad=linea.cantidad,
+                    precio_unitario=aplicar_descuento(linea.precio_unitario, descuento),
                 )
         return pedido
+
+    @staticmethod
+    def _descontar_ingredientes(personalizadas: Iterable[LineaPersonalizada]) -> None:
+        """Descuenta el stock de ingredientes con UPDATE condicionales (hallazgo #8).
+
+        Debe llamarse dentro de la transacción del pedido: si un ingrediente se
+        agotó entre la validación y este punto, StockInsuficiente revierte todo.
+        """
+        for ingrediente_id, unidades in demanda_de_ingredientes(personalizadas).items():
+            actualizados = Ingrediente.objects.filter(
+                pk=ingrediente_id, activo=True, stock_disponible__gte=unidades
+            ).update(stock_disponible=F('stock_disponible') - unidades)
+            if actualizados != 1:
+                raise StockInsuficiente(
+                    'Los ingredientes de tus cupcakes cambiaron mientras confirmabas. '
+                    'Revisa nuevamente tu carrito.'
+                )
 
 
 class Pedido(models.Model):
@@ -597,6 +871,18 @@ def generar_codigo_qr() -> str:
     return secrets.token_urlsafe(16)
 
 
+class ExperienciaQRQuerySet(models.QuerySet['ExperienciaQR']):
+    """Consultas de videos VIP."""
+
+    def vigentes(self) -> ExperienciaQRQuerySet:
+        """Experiencias cuya fecha de expiración no ha pasado."""
+        return self.filter(fecha_expiracion__gt=timezone.now())
+
+    def vigente_de(self, usuario: User) -> ExperienciaQR | None:
+        """El video vigente más reciente del usuario, o None ("estará listo pronto")."""
+        return self.vigentes().filter(usuario=usuario).order_by('-fecha_expiracion', '-pk').first()
+
+
 class ExperienciaQR(models.Model):
     """Video personal de un usuario VIP, que se abre al escanear su código QR.
 
@@ -618,6 +904,8 @@ class ExperienciaQR(models.Model):
     video = models.FileField(upload_to='videos/', max_length=255)
     mensaje_texto = models.TextField(blank=True, null=True)
     fecha_expiracion = models.DateTimeField()
+
+    objects = ExperienciaQRQuerySet.as_manager()
 
     def __str__(self) -> str:
         return f"QR {self.codigo_unico}"

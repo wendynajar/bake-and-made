@@ -12,6 +12,7 @@ dj-database-url = ">=2.3"
 psycopg = {extras = ["binary"], version = ">=3.2"}
 python-dotenv = ">=1.0"
 django-storages = {extras = ["s3"], version = ">=1.14"}
+segno = ">=1.6"
 
 [dev-packages]
 

@@ -13,6 +13,8 @@ services:
     plan: free
     buildCommand: ./build.sh
     startCommand: cd bakeandmade && gunicorn bakeandmade.wsgi:application --bind 0.0.0.0:$PORT
+    # Responde 200 sin tocar la BD; el ESP32 también lo llama cada 10 min.
+    healthCheckPath: /healthz
     envVars:
       - key: PYTHON_VERSION
         value: 3.13.5
@@ -40,4 +42,12 @@ services:
       - key: DJANGO_SUPERUSER_EMAIL
         sync: false
       - key: DJANGO_SUPERUSER_PASSWORD
+        sync: false
+      # Capa VIP/RFID. El token se genera aquí; cópialo al secrets.h del ESP32.
+      - key: IOT_DEVICE_TOKEN
+        generateValue: true
+      # Usuarios demo (build.sh corre crear_usuarios_demo si ambas existen).
+      - key: DEMO_PASSWORD
+        sync: false
+      - key: DEMO_VIP_UIDS
         sync: false
