@@ -175,6 +175,8 @@ Datos iniciales: `python manage.py cargar_catalogo` crea 13 productos, 5 categor
 ### Pendientes
 
 **Bugs funcionales**
+> **#7 y #8 resueltos en la fase 6 de la capa VIP** (checkout de personalizados con validación de ingredientes en el servidor y descuento de su stock). Se conserva la descripción original:
+
 7. **El checkout ignora los cupcakes personalizados.** `checkout()` solo lee `obtener_carrito()` (`views.py:247`):
    - si el carrito solo tiene personalizados, responde "Tu carrito está vacío";
    - si tiene ambos tipos, el total del carrito no coincide con el del checkout, y los personalizados se quedan en la sesión después de comprar;

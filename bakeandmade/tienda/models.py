@@ -366,6 +366,9 @@ class CupcakePersonalizado(models.Model):
     nombre_custom = models.CharField(max_length=100, blank=True, null=True)
     precio_calculado = models.DecimalField(max_digits=10, decimal_places=2)
     ingredientes = models.ManyToManyField(Ingrediente, through='CupcakeIngredientes')
+    # Se guardan con el pedido porque la cocina los necesita para prepararlo.
+    dietas = models.JSONField(default=list, blank=True)
+    color_frosting = models.CharField(max_length=20, blank=True)
 
     def __str__(self) -> str:
         return self.nombre_custom or f"Cupcake Custom #{self.id}"
@@ -454,6 +457,61 @@ class LineaCarrito:
         }
 
 
+@dataclass(frozen=True)
+class LineaPersonalizada:
+    """Cupcake personalizado del carrito, con ingredientes verificados contra la BD.
+
+    El precio se recalcula con los ingredientes actuales; nunca se usa el precio
+    guardado en la sesión.
+    """
+
+    nombre: str
+    ingredientes: tuple[tuple[PasoCupcake, Ingrediente], ...]
+    dietas: tuple[str, ...]
+    color_frosting: str
+    cantidad: int
+
+    @property
+    def precio_unitario(self) -> Decimal:
+        """$35 más los extras de los ingredientes (CupcakePersonalizado.calcular_precio)."""
+        return CupcakePersonalizado.calcular_precio(ing for _, ing in self.ingredientes)
+
+    @property
+    def subtotal(self) -> Decimal:
+        """Precio unitario por la cantidad."""
+        return self.precio_unitario * self.cantidad
+
+    def as_dict(self) -> dict[str, Any]:
+        """Representación para las plantillas del carrito y del checkout."""
+        return {
+            'tipo': 'personalizado',
+            'nombre': self.nombre,
+            'ingredientes': [
+                {'paso': paso.nombre, 'nombre': ingrediente.nombre}
+                for paso, ingrediente in self.ingredientes
+            ],
+            'cantidad': self.cantidad,
+            'precio_unitario': self.precio_unitario,
+            'subtotal': self.subtotal,
+        }
+
+
+LineaPedido = LineaCarrito | LineaPersonalizada
+
+
+def demanda_de_ingredientes(lineas: Iterable[LineaPersonalizada]) -> dict[int, int]:
+    """Unidades de cada ingrediente que consumen los cupcakes (id → unidades).
+
+    Se agrupa por ingrediente porque dos cupcakes distintos pueden compartirlo y
+    el stock debe alcanzar para ambos.
+    """
+    demanda: dict[int, int] = {}
+    for linea in lineas:
+        for _, ingrediente in linea.ingredientes:
+            demanda[ingrediente.pk] = demanda.get(ingrediente.pk, 0) + linea.cantidad
+    return demanda
+
+
 class PedidoQuerySet(models.QuerySet['Pedido']):
     """Operaciones de negocio sobre pedidos."""
 
@@ -479,8 +537,75 @@ class PedidoQuerySet(models.QuerySet['Pedido']):
         return lineas
 
     @staticmethod
-    def total_de(lineas: Iterable[LineaCarrito]) -> Decimal:
-        """Suma de subtotales."""
+    def personalizados_validos(
+        personalizados: Iterable[Any], usuario: UsuarioOAnonimo
+    ) -> list[LineaPersonalizada]:
+        """Convierte los cupcakes personalizados de la sesión en líneas verificadas.
+
+        La sesión solo se usa para saber qué eligió el cliente: cada ingrediente se
+        vuelve a buscar en la BD y debe seguir activo, ser de la categoría de su
+        paso y ser visible para el usuario (los exclusivos exigen Sweet vigente).
+        También se revisa que haya stock para todos los cupcakes juntos.
+        Lanza ErrorPedido o StockInsuficiente con un mensaje para el cliente.
+        """
+        personalizados = list(personalizados)
+        ids = {
+            dato['id']
+            for cupcake in personalizados
+            if isinstance(cupcake, dict) and isinstance(cupcake.get('ingredientes'), dict)
+            for dato in cupcake['ingredientes'].values()
+            if isinstance(dato, dict) and isinstance(dato.get('id'), int)
+        }
+        disponibles = {
+            ingrediente.pk: ingrediente
+            for ingrediente in Ingrediente.objects.visibles_para(usuario)
+            .filter(activo=True, pk__in=ids)
+            .select_related('categoria')
+        }
+
+        lineas = []
+        for cupcake in personalizados:
+            invalido = ErrorPedido(
+                'Uno de tus cupcakes personalizados no es válido. Elimínalo y ármalo de nuevo.'
+            )
+            if not isinstance(cupcake, dict) or not isinstance(cupcake.get('ingredientes'), dict):
+                raise invalido
+            cantidad = cupcake.get('cantidad', 1)
+            if type(cantidad) is not int or cantidad <= 0:
+                raise invalido
+
+            elegidos = []
+            for paso in CupcakePersonalizado.PASOS:
+                dato = cupcake['ingredientes'].get(paso.slug)
+                ingrediente = disponibles.get(dato.get('id')) if isinstance(dato, dict) else None
+                if ingrediente is None or ingrediente.categoria.nombre.lower() != paso.categoria.lower():
+                    raise ErrorPedido(
+                        f'La opción de {paso.nombre.lower()} de tu cupcake ya no está disponible. '
+                        'Elimínalo del carrito y ármalo de nuevo.'
+                    )
+                elegidos.append((paso, ingrediente))
+
+            dietas = cupcake.get('dietas')
+            color = cupcake.get('color_frosting', '')
+            lineas.append(LineaPersonalizada(
+                nombre=str(cupcake.get('nombre') or 'Cupcake personalizado')[:100],
+                ingredientes=tuple(elegidos),
+                dietas=tuple(CupcakePersonalizado.filtrar_dietas(dietas if isinstance(dietas, list) else [])),
+                color_frosting=color if color in CupcakePersonalizado.COLORES_FROSTING else '',
+                cantidad=cantidad,
+            ))
+
+        for ingrediente_id, unidades in demanda_de_ingredientes(lineas).items():
+            ingrediente = disponibles[ingrediente_id]
+            if ingrediente.stock_disponible < unidades:
+                raise StockInsuficiente(
+                    f'No hay suficiente {ingrediente.nombre} para tus cupcakes personalizados.'
+                )
+        return lineas
+
+    @staticmethod
+    def total_de(lineas: Iterable[LineaPedido]) -> Decimal:
+        """Suma de subtotales (productos del catálogo y cupcakes personalizados)."""
         return sum((linea.subtotal for linea in lineas), Decimal('0.00'))
 
     def crear_desde_carrito(
@@ -491,20 +616,27 @@ class PedidoQuerySet(models.QuerySet['Pedido']):
         direccion: str,
         checkout_token: uuid.UUID | str,
         total_esperado: Decimal,
+        personalizados: Iterable[Any] = (),
     ) -> Pedido:
         """Registra el pedido y descuenta el stock de forma atómica.
 
         Por qué así:
         - Se recalcula el total dentro de la transacción y se rechaza si difiere
           del que vio el cliente (PrecioCambiado).
-        - El stock se descuenta con un UPDATE condicional (`stock >= cantidad`)
-          para evitar sobreventa entre peticiones concurrentes (StockInsuficiente).
+        - El stock de productos e ingredientes se descuenta con UPDATE
+          condicionales (`stock >= cantidad`) para evitar sobreventa entre
+          peticiones concurrentes (StockInsuficiente).
         - `checkout_token` es único: un doble envío del formulario provoca
           IntegrityError en lugar de un pedido duplicado.
+        - Cada cupcake personalizado se guarda como `CupcakePersonalizado` con sus
+          `CupcakeIngredientes`, y su línea apunta a él (`cupcake_custom`).
         """
         with transaction.atomic():
             lineas = self.lineas_validas(carrito)
-            total = self.total_de(lineas)
+            personalizadas = self.personalizados_validos(personalizados, usuario)
+            if not lineas and not personalizadas:
+                raise ErrorPedido('Tu carrito está vacío.')
+            total = self.total_de([*lineas, *personalizadas])
             if total != total_esperado:
                 raise PrecioCambiado('Los precios cambiaron. Revisa nuevamente tu pedido.')
 
@@ -535,7 +667,44 @@ class PedidoQuerySet(models.QuerySet['Pedido']):
                     cantidad=linea.cantidad,
                     precio_unitario=linea.producto.precio_base,
                 )
+
+            self._descontar_ingredientes(personalizadas)
+            for linea in personalizadas:
+                cupcake = CupcakePersonalizado.objects.create(
+                    usuario=usuario,
+                    nombre_custom=linea.nombre,
+                    precio_calculado=linea.precio_unitario,
+                    dietas=list(linea.dietas),
+                    color_frosting=linea.color_frosting,
+                )
+                CupcakeIngredientes.objects.bulk_create(
+                    CupcakeIngredientes(cupcake=cupcake, ingrediente=ingrediente)
+                    for _, ingrediente in linea.ingredientes
+                )
+                DetallePedido.objects.create(
+                    pedido=pedido,
+                    cupcake_custom=cupcake,
+                    cantidad=linea.cantidad,
+                    precio_unitario=linea.precio_unitario,
+                )
         return pedido
+
+    @staticmethod
+    def _descontar_ingredientes(personalizadas: Iterable[LineaPersonalizada]) -> None:
+        """Descuenta el stock de ingredientes con UPDATE condicionales (hallazgo #8).
+
+        Debe llamarse dentro de la transacción del pedido: si un ingrediente se
+        agotó entre la validación y este punto, StockInsuficiente revierte todo.
+        """
+        for ingrediente_id, unidades in demanda_de_ingredientes(personalizadas).items():
+            actualizados = Ingrediente.objects.filter(
+                pk=ingrediente_id, activo=True, stock_disponible__gte=unidades
+            ).update(stock_disponible=F('stock_disponible') - unidades)
+            if actualizados != 1:
+                raise StockInsuficiente(
+                    'Los ingredientes de tus cupcakes cambiaron mientras confirmabas. '
+                    'Revisa nuevamente tu carrito.'
+                )
 
 
 class Pedido(models.Model):

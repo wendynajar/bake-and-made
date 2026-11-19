@@ -102,6 +102,8 @@ def _linea_personalizada(
     el final con el descuento VIP. Devuelve None si los datos guardados están
     corruptos (precio o cantidad inválidos).
     """
+    if not isinstance(cupcake, dict):
+        return None
     try:
         precio = Decimal(str(cupcake.get('precio_unitario', '0')))
     except (InvalidOperation, TypeError, ValueError):
@@ -272,14 +274,19 @@ def checkout(request: HttpRequest) -> HttpResponse:
 
     El GET genera un token de un solo uso y guarda el total mostrado; el POST
     exige ese token (evita pedidos duplicados) y que el total no haya cambiado.
+    Procesa productos del catálogo y cupcakes personalizados (hallazgo #7).
     """
     carrito = obtener_carrito(request)
-    if not carrito:
+    personalizados = obtener_personalizados(request)
+    if not carrito and not personalizados:
         messages.warning(request, 'Tu carrito está vacío.')
         return redirect('ver_carrito')
 
     try:
-        lineas = Pedido.objects.lineas_validas(carrito)
+        lineas = [
+            *Pedido.objects.lineas_validas(carrito),
+            *Pedido.objects.personalizados_validos(personalizados, request.user),
+        ]
     except ErrorPedido as error:
         messages.error(request, str(error))
         return redirect('ver_carrito')
@@ -323,6 +330,7 @@ def checkout(request: HttpRequest) -> HttpResponse:
             direccion=direccion,
             checkout_token=token_sesion,
             total_esperado=total,
+            personalizados=personalizados,
         )
     except IntegrityError:
         messages.error(
@@ -337,8 +345,9 @@ def checkout(request: HttpRequest) -> HttpResponse:
         messages.error(request, str(error))
         return redirect('ver_carrito')
 
-    # Vaciar el carrito solo después de guardar el pedido correctamente.
+    # Vaciar ambos carritos solo después de guardar el pedido correctamente.
     request.session[CLAVE_CARRITO] = {}
+    request.session[CLAVE_PERSONALIZADOS] = []
     request.session.pop('checkout_token', None)
     request.session.pop('checkout_total', None)
 

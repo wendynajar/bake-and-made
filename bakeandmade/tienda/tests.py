@@ -21,6 +21,7 @@ from .models import (
     PLAN_SWEET,
     CategoriaIngrediente,
     CupcakePersonalizado,
+    ErrorPedido,
     ExperienciaQR,
     Ingrediente,
     Menu,
@@ -187,6 +188,165 @@ class CheckoutVistaTests(TestCase):
         self.client.post(reverse('checkout'), datos)
 
         self.assertEqual(Pedido.objects.count(), 1)
+
+
+class CheckoutPersonalizadosTests(TestCase):
+    """Checkout de cupcakes personalizados (hallazgos #7 y #8, fase 6)."""
+
+    def setUp(self) -> None:
+        self.usuario = User.objects.create_user('dani', password='clave-segura-123')
+        self.client.force_login(self.usuario)
+        self.producto = Menu.objects.create(
+            nombre_producto='Brownie', descripcion='-', precio_base=Decimal('45.00'), stock=5
+        )
+        precios = {'Base': '0.00', 'Relleno': '5.00', 'Cobertura': '7.00', 'Topping': '2.00'}
+        self.ingredientes = {}
+        for categoria, precio in precios.items():
+            self.ingredientes[categoria.lower()] = Ingrediente.objects.create(
+                categoria=CategoriaIngrediente.objects.create(nombre=categoria),
+                nombre=f'{categoria} de prueba',
+                precio_adicional=Decimal(precio),
+                stock_disponible=10,
+            )
+        # $35 + 0 + 5 + 7 + 2
+        self.precio_cupcake = Decimal('49.00')
+
+    def cupcake(self, cantidad: int = 1, **cambios: Any) -> dict[str, Any]:
+        datos = {
+            'tipo': 'cupcake_personalizado',
+            'nombre': 'Cupcake personalizado',
+            'ingredientes': {
+                slug: {'id': ingrediente.pk, 'nombre': ingrediente.nombre}
+                for slug, ingrediente in self.ingredientes.items()
+            },
+            'dietas': ['vegano', 'inventada'],
+            'color_frosting': 'rosa',
+            'precio_unitario': str(self.precio_cupcake),
+            'cantidad': cantidad,
+        }
+        datos.update(cambios)
+        return datos
+
+    def con_carrito(self, personalizados: list[dict[str, Any]], productos: int = 0) -> None:
+        sesion = self.client.session
+        sesion['carrito'] = {str(self.producto.pk): productos} if productos else {}
+        sesion['carrito_personalizados'] = personalizados
+        sesion.save()
+
+    def comprar(self) -> Any:
+        self.client.get(reverse('checkout'))
+        return self.client.post(reverse('checkout'), {
+            'checkout_token': self.client.session.get('checkout_token', ''),
+            'direccion_entrega': 'Calle 3',
+        })
+
+    def stock(self, slug: str) -> int:
+        return Ingrediente.objects.get(pk=self.ingredientes[slug].pk).stock_disponible
+
+    def test_solo_personalizados_crea_el_pedido(self) -> None:
+        self.con_carrito([self.cupcake(cantidad=2)])
+
+        respuesta = self.comprar()
+
+        pedido = Pedido.objects.get()
+        self.assertRedirects(respuesta, reverse('pedido_confirmado', args=[pedido.pk]))
+        self.assertEqual(pedido.total, Decimal('98.00'))
+        detalle = pedido.detallepedido_set.get()
+        self.assertEqual(detalle.cantidad, 2)
+        self.assertEqual(detalle.precio_unitario, self.precio_cupcake)
+        cupcake = detalle.cupcake_custom
+        self.assertEqual(cupcake.usuario, self.usuario)
+        self.assertEqual(cupcake.precio_calculado, self.precio_cupcake)
+        self.assertEqual(cupcake.dietas, ['vegano'])
+        self.assertEqual(cupcake.color_frosting, 'rosa')
+        self.assertEqual(
+            set(cupcake.ingredientes.values_list('pk', flat=True)),
+            {i.pk for i in self.ingredientes.values()},
+        )
+
+    def test_descuenta_stock_de_ingredientes_y_vacia_ambos_carritos(self) -> None:
+        self.con_carrito([self.cupcake(cantidad=2), self.cupcake(cantidad=1)], productos=1)
+
+        self.comprar()
+
+        for slug in self.ingredientes:
+            self.assertEqual(self.stock(slug), 7)
+        self.assertEqual(self.client.session['carrito'], {})
+        self.assertEqual(self.client.session['carrito_personalizados'], [])
+
+    def test_mezcla_productos_y_personalizados(self) -> None:
+        self.con_carrito([self.cupcake()], productos=2)
+
+        self.comprar()
+
+        pedido = Pedido.objects.get()
+        self.assertEqual(pedido.total, Decimal('90.00') + self.precio_cupcake)
+        self.assertEqual(pedido.detallepedido_set.count(), 2)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock, 3)
+
+    def test_el_precio_de_la_sesion_no_se_usa_para_cobrar(self) -> None:
+        self.con_carrito([self.cupcake(precio_unitario='1.00')])
+
+        respuesta = self.client.get(reverse('checkout'))
+
+        self.assertEqual(respuesta.context['total'], self.precio_cupcake)
+
+    def rechaza_sin_cambios(self, mensaje: str) -> None:
+        respuesta = self.comprar()
+        self.assertFalse(Pedido.objects.exists())
+        self.assertFalse(CupcakePersonalizado.objects.exists())
+        self.assertEqual(self.stock('base'), 10)
+        self.assertRedirects(respuesta, reverse('ver_carrito'), fetch_redirect_response=False)
+        mensajes = [str(m) for m in self.client.get(reverse('ver_carrito')).context['messages']]
+        self.assertTrue(any(mensaje in m for m in mensajes), mensajes)
+
+    def test_ingrediente_desactivado(self) -> None:
+        self.con_carrito([self.cupcake()])
+        Ingrediente.objects.filter(pk=self.ingredientes['relleno'].pk).update(activo=False)
+        self.rechaza_sin_cambios('relleno de tu cupcake ya no está disponible')
+
+    def test_ingrediente_exclusivo_sin_sweet(self) -> None:
+        self.con_carrito([self.cupcake()])
+        Ingrediente.objects.filter(pk=self.ingredientes['topping'].pk).update(solo_suscriptores=True)
+        self.rechaza_sin_cambios('topping de tu cupcake ya no está disponible')
+
+    def test_ingrediente_exclusivo_con_sweet_si_se_vende(self) -> None:
+        Suscripcion.contratar_mes(self.usuario)
+        Ingrediente.objects.filter(pk=self.ingredientes['topping'].pk).update(solo_suscriptores=True)
+        self.con_carrito([self.cupcake()])
+        self.comprar()
+        self.assertTrue(Pedido.objects.exists())
+
+    def test_ingrediente_de_otra_categoria(self) -> None:
+        cupcake = self.cupcake()
+        cupcake['ingredientes']['base'] = {'id': self.ingredientes['topping'].pk, 'nombre': 'x'}
+        self.con_carrito([cupcake])
+        self.rechaza_sin_cambios('base de tu cupcake ya no está disponible')
+
+    def test_stock_insuficiente_entre_varios_cupcakes(self) -> None:
+        Ingrediente.objects.filter(pk=self.ingredientes['base'].pk).update(stock_disponible=2)
+        self.con_carrito([self.cupcake(cantidad=2), self.cupcake(cantidad=1)])
+
+        respuesta = self.comprar()
+
+        self.assertFalse(Pedido.objects.exists())
+        self.assertEqual(self.stock('base'), 2)
+        self.assertEqual(self.stock('relleno'), 10)
+        self.assertRedirects(respuesta, reverse('ver_carrito'), fetch_redirect_response=False)
+
+    def test_datos_corruptos_en_la_sesion(self) -> None:
+        for corrupto in ('texto', {'ingredientes': 'x'}, self.cupcake(cantidad=0)):
+            with self.subTest(corrupto=corrupto):
+                self.con_carrito([corrupto])
+                self.rechaza_sin_cambios('no es válido')
+
+    def test_el_modelo_rechaza_un_carrito_vacio(self) -> None:
+        with self.assertRaises(ErrorPedido):
+            Pedido.objects.crear_desde_carrito(
+                usuario=self.usuario, carrito={}, direccion='x',
+                checkout_token=uuid.uuid4(), total_esperado=Decimal('0'), personalizados=[],
+            )
 
 
 class PaginasPublicasTests(TestCase):

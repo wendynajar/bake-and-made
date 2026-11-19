@@ -176,7 +176,7 @@
                     <div class="checkout-product">
 
                         <div class="checkout-product-image">
-                            {% if item.producto.imagen %}
+                            {% if item.tipo == 'normal' and item.producto.imagen %}
                                 <img src="{{ item.producto.imagen.url }}"
                                      alt="{{ item.producto.nombre_producto }}">
                             {% else %}
@@ -185,7 +185,14 @@
                         </div>
 
                         <div class="checkout-product-info">
-                            <h3>{{ item.producto.nombre_producto }}</h3>
+                            {% if item.tipo == 'personalizado' %}
+                                <h3>{{ item.nombre }}</h3>
+                                <small>
+                                    {% for ingrediente in item.ingredientes %}{{ ingrediente.nombre }}{% if not forloop.last %} · {% endif %}{% endfor %}
+                                </small>
+                            {% else %}
+                                <h3>{{ item.producto.nombre_producto }}</h3>
+                            {% endif %}
                             <small>Cantidad: {{ item.cantidad }}</small>
                         </div>
 
