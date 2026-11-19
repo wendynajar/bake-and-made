@@ -21,7 +21,7 @@
                 <a href="{% url 'inicio' %}">Inicio</a>
                 <a href="{% url 'suscripcion' %}">Planes</a>
                 <a href="{% url 'ver_carrito' %}">Carrito</a>
-                {% if es_plan_sweet %}<span class="sweet-menu-badge">Sweet</span>{% endif %}
+                {% include 'tienda/_vip_nav.html' %}
             </nav>
         </div>
     </header>
@@ -41,5 +41,6 @@
     <footer class="premium-footer">
         <div class="footer-bottom"><span>© 2026 Bake & Made</span><span>MADE WITH LOVE ✦</span></div>
     </footer>
+    {% include 'iot/_kiosco.html' %}
 </body>
 </html>

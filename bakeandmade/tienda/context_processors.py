@@ -7,16 +7,17 @@ from typing import Any
 from django.http import HttpRequest
 
 from .carrito import contar_articulos
-from .models import PLAN_SWEET, PRECIO_SWEET_PLAN, Suscripcion
+from .models import PLAN_SWEET, PRECIO_SWEET_PLAN
+from .peticion import plan_de_peticion
 
 
 def contador_carrito(request: HttpRequest) -> dict[str, Any]:
     """Contador del carrito y plan del usuario para la barra de navegación.
 
-    Nota: consultar el plan expira suscripciones vencidas (un UPDATE por
-    petición de usuario autenticado). A futuro conviene moverlo a un cron job.
+    El plan se calcula una sola vez por petición (`tienda.peticion`), aunque
+    también lo usen el context processor VIP y las vistas.
     """
-    plan = Suscripcion.objects.plan_de(request.user)
+    plan = plan_de_peticion(request)
     return {
         'contador_carrito': contar_articulos(request),
         'plan_usuario': plan,

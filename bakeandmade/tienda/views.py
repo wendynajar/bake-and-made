@@ -12,6 +12,7 @@ from typing import Any
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -34,7 +35,9 @@ from .models import (
     Pedido,
     PrecioCambiado,
     Suscripcion,
+    aplicar_descuento,
 )
+from .peticion import descuento_de_peticion
 
 
 def _entero_o_none(valor: Any) -> int | None:
@@ -50,8 +53,15 @@ def _entero_o_none(valor: Any) -> int | None:
 
 
 def inicio(request: HttpRequest) -> HttpResponse:
-    """Página principal con los productos en venta."""
-    productos = Menu.objects.en_venta().select_related('categoria')
+    """Página principal con los productos en venta y su precio final.
+
+    `producto.precio_final` ya trae el descuento VIP del usuario (igual al
+    precio base si no tiene).
+    """
+    descuento, _ = descuento_de_peticion(request)
+    productos = list(Menu.objects.en_venta().select_related('categoria'))
+    for producto in productos:
+        producto.precio_final = aplicar_descuento(producto.precio_base, descuento)
     return render(request, 'tienda/inicio.html', {'productos': productos})
 
 
@@ -83,10 +93,14 @@ def agregar_carrito(request: HttpRequest, producto_id: int) -> HttpResponse:
     return redirect('inicio')
 
 
-def _linea_personalizada(indice: int, cupcake: dict[str, Any]) -> dict[str, Any] | None:
+def _linea_personalizada(
+    indice: int, cupcake: dict[str, Any], descuento: Decimal = Decimal('0')
+) -> dict[str, Any] | None:
     """Prepara un cupcake personalizado de la sesión para mostrarlo en el carrito.
 
-    Devuelve None si los datos guardados están corruptos (precio o cantidad inválidos).
+    `precio_base` es el calculado al armarlo ($35 + extras) y `precio_unitario`
+    el final con el descuento VIP. Devuelve None si los datos guardados están
+    corruptos (precio o cantidad inválidos).
     """
     try:
         precio = Decimal(str(cupcake.get('precio_unitario', '0')))
@@ -108,6 +122,7 @@ def _linea_personalizada(indice: int, cupcake: dict[str, Any]) -> dict[str, Any]
     ]
 
     color = cupcake.get('color_frosting', '')
+    precio_final = aplicar_descuento(precio, descuento)
     return {
         'tipo': 'personalizado',
         'indice_personalizado': indice,
@@ -120,34 +135,48 @@ def _linea_personalizada(indice: int, cupcake: dict[str, Any]) -> dict[str, Any]
         ],
         'color_frosting': CupcakePersonalizado.COLORES_FROSTING.get(color, color),
         'cantidad': cantidad,
-        'precio_unitario': precio,
-        'subtotal': precio * cantidad,
+        'precio_base': precio,
+        'precio_unitario': precio_final,
+        'subtotal_base': precio * cantidad,
+        'subtotal': precio_final * cantidad,
     }
 
 
 def ver_carrito(request: HttpRequest) -> HttpResponse:
-    """Muestra productos del catálogo y cupcakes personalizados con su total."""
+    """Muestra productos del catálogo y cupcakes personalizados con su total.
+
+    Cada línea lleva su precio base y su precio final con el descuento VIP; el
+    total es la suma de líneas ya redondeadas, como se cobrará en el checkout.
+    """
+    descuento, _ = descuento_de_peticion(request)
     carrito = obtener_carrito(request)
     productos_carrito: list[dict[str, Any]] = []
 
     for producto in Menu.objects.filter(id__in=carrito.keys()):
         cantidad = carrito.get(str(producto.id), 0)
         if type(cantidad) is int and cantidad > 0:
+            precio_final = aplicar_descuento(producto.precio_base, descuento)
             productos_carrito.append({
                 'tipo': 'normal',
                 'producto': producto,
                 'cantidad': cantidad,
-                'subtotal': producto.precio_base * cantidad,
+                'precio_base': producto.precio_base,
+                'precio_unitario': precio_final,
+                'subtotal_base': producto.precio_base * cantidad,
+                'subtotal': precio_final * cantidad,
             })
 
     for indice, cupcake in enumerate(obtener_personalizados(request)):
-        linea = _linea_personalizada(indice, cupcake)
+        linea = _linea_personalizada(indice, cupcake, descuento)
         if linea is not None:
             productos_carrito.append(linea)
 
+    subtotal = sum((item['subtotal_base'] for item in productos_carrito), Decimal('0.00'))
     total = sum((item['subtotal'] for item in productos_carrito), Decimal('0.00'))
     return render(request, 'tienda/carrito.html', {
         'productos_carrito': productos_carrito,
+        'subtotal': subtotal,
+        'ahorro': subtotal - total,
         'total': total,
     })
 
@@ -514,6 +543,23 @@ def agregar_cupcake_personalizado(request: HttpRequest) -> HttpResponse:
 # =====================================================
 
 
+def _mensaje_entrega_tarjeta(usuario: Any) -> str:
+    """Texto de la entrega simulada de la tarjeta VIP tras contratar el Sweet Plan.
+
+    Se lee la relación inversa `usuario.tarjeta` para no importar la app iot.
+    """
+    try:
+        tarjeta = usuario.tarjeta
+    except ObjectDoesNotExist:
+        tarjeta = None
+    if tarjeta is None:
+        return 'Tu tarjeta VIP está en camino.'
+    return (
+        f'Tu tarjeta VIP termina en …{tarjeta.uid[-2:]}. Recíbela en tienda y '
+        'úsala en el kiosco para entrar sin contraseña.'
+    )
+
+
 def pagina_suscripcion(request: HttpRequest) -> HttpResponse:
     """Comparativa de planes y estado de la suscripción del usuario."""
     suscripcion = Suscripcion.objects.vigente_para(request.user)
@@ -535,8 +581,10 @@ def confirmar_suscripcion(request: HttpRequest) -> HttpResponse:
         Suscripcion.contratar_mes(request.user)
         messages.success(
             request,
-            '¡Tu Sweet Plan está activo! Disfruta tus ingredientes exclusivos.',
+            '¡Tu Sweet Plan está activo! Disfruta tus ingredientes exclusivos '
+            'y tu descuento VIP.',
         )
+        messages.info(request, _mensaje_entrega_tarjeta(request.user))
         return redirect('suscripcion')
 
     return render(request, 'tienda/confirmar_suscripcion.html', {

@@ -106,6 +106,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'tienda.context_processors.contador_carrito',
+                'usuarios.context_processors.vip',
             ],
         },
     },

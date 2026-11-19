@@ -4,6 +4,8 @@ import datetime
 import uuid
 from decimal import Decimal
 from io import StringIO
+from typing import Any
+from unittest import mock
 
 from django.contrib.auth.models import AnonymousUser, User
 from django.core.management import call_command
@@ -11,6 +13,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from iot.models import TarjetaRFID
 from usuarios.models import PerfilVIP
 
 from .models import (
@@ -337,3 +340,146 @@ class AplicarDescuentoTests(TestCase):
     def test_redondeo_half_up(self) -> None:
         # 0.25 x 0.5 = 0.125, que con ROUND_HALF_UP queda en 0.13 (no redondeo bancario).
         self.assertEqual(aplicar_descuento(Decimal('0.25'), Decimal('0.50')), Decimal('0.13'))
+
+
+class TiendaVIPTests(TestCase):
+    """Catálogo, carrito y barra con el descuento VIP (fase 5)."""
+
+    def setUp(self) -> None:
+        self.producto = Menu.objects.create(
+            nombre_producto='Pastel de prueba', descripcion='-',
+            precio_base=Decimal('100.00'), stock=5,
+        )
+        self.usuario = User.objects.create_user(
+            'ana', password='clave-segura-123', first_name='Ana'
+        )
+        sesion = self.client.session
+        sesion['carrito'] = {str(self.producto.pk): 1}
+        sesion['carrito_personalizados'] = [{
+            'nombre': 'Cupcake personalizado',
+            'precio_unitario': '35.00',
+            'cantidad': 1,
+            'ingredientes': {},
+        }]
+        sesion.save()
+
+    def carrito(self) -> Any:
+        respuesta = self.client.get(reverse('ver_carrito'))
+        self.assertEqual(respuesta.status_code, 200)
+        return respuesta
+
+    def test_mismo_carrito_anonimo_y_luego_sweet(self) -> None:
+        anonimo = self.carrito()
+        self.assertEqual(anonimo.context['total'], Decimal('135.00'))
+        self.assertFalse(anonimo.context['vip_activo'])
+
+        Suscripcion.contratar_mes(self.usuario)
+        self.client.force_login(self.usuario)
+        sweet = self.carrito()
+
+        lineas = {item['tipo']: item for item in sweet.context['productos_carrito']}
+        self.assertEqual(lineas['normal']['precio_unitario'], Decimal('80.00'))
+        self.assertEqual(lineas['personalizado']['precio_unitario'], Decimal('28.00'))
+        self.assertEqual(sweet.context['subtotal'], Decimal('135.00'))
+        self.assertEqual(sweet.context['ahorro'], Decimal('27.00'))
+        self.assertEqual(sweet.context['total'], Decimal('108.00'))
+        self.assertContains(sweet, 'Descuento VIP')
+
+    def test_basic_ve_la_tienda_como_hoy(self) -> None:
+        self.client.force_login(self.usuario)
+        respuesta = self.client.get(reverse('inicio'))
+        self.assertNotContains(respuesta, 'Membresía VIP')
+        self.assertNotContains(respuesta, '<del')
+        self.assertEqual(self.carrito().context['total'], Decimal('135.00'))
+
+    def test_sweet_ve_pestana_vip_y_precio_tachado(self) -> None:
+        Suscripcion.contratar_mes(self.usuario)
+        self.client.force_login(self.usuario)
+
+        respuesta = self.client.get(reverse('inicio'))
+
+        self.assertContains(respuesta, 'Membresía VIP')
+        self.assertContains(respuesta, 'VIP −20 %')
+        self.assertContains(respuesta, '<del aria-label="Precio normal">$100.00</del>')
+        self.assertContains(respuesta, '$80.00 MXN')
+
+    def test_cumpleanios_muestra_50(self) -> None:
+        Suscripcion.contratar_mes(self.usuario)
+        hoy = timezone.localdate()
+        PerfilVIP.objects.create(
+            usuario=self.usuario,
+            fecha_nacimiento=hoy.replace(year=1995) if (hoy.month, hoy.day) != (2, 29)
+            else datetime.date(1996, 2, 29),
+            cumple_registrado_en=hoy - datetime.timedelta(days=30),
+        )
+        self.client.force_login(self.usuario)
+
+        respuesta = self.carrito()
+
+        self.assertEqual(respuesta.context['total'], Decimal('67.50'))
+        self.assertContains(respuesta, 'Cumpleaños −50 %')
+
+    def test_el_plan_se_consulta_una_sola_vez_por_peticion(self) -> None:
+        Suscripcion.contratar_mes(self.usuario)
+        self.client.force_login(self.usuario)
+        original = Suscripcion.objects.plan_de
+
+        with mock.patch.object(
+            type(Suscripcion.objects), 'plan_de', autospec=True, side_effect=lambda qs, u: original(u)
+        ) as plan_de:
+            self.carrito()
+
+        self.assertEqual(plan_de.call_count, 1)
+
+
+class KioscoPlantillaTests(TestCase):
+    """polling.js y la barra del kiosco solo aparecen en navegadores vinculados."""
+
+    def test_sin_terminal_no_hay_polling(self) -> None:
+        respuesta = self.client.get(reverse('inicio'))
+        self.assertNotContains(respuesta, 'iot/polling.js')
+
+    def test_kiosco_anonimo_invita_a_pasar_la_tarjeta(self) -> None:
+        sesion = self.client.session
+        sesion['terminal'] = 'caja-1'
+        sesion.save()
+
+        respuesta = self.client.get(reverse('inicio'))
+
+        self.assertContains(respuesta, 'iot/polling.js')
+        self.assertContains(respuesta, 'Pasa tu tarjeta VIP')
+        self.assertNotContains(respuesta, 'kiosco-salir')
+
+    def test_sesion_por_tarjeta_muestra_saludo_y_salir(self) -> None:
+        usuario = User.objects.create_user('ana', password='clave-segura-123', first_name='Ana')
+        self.client.force_login(usuario)
+        sesion = self.client.session
+        sesion['terminal'] = 'caja-1'
+        sesion['login_por_tarjeta'] = True
+        sesion.save()
+
+        respuesta = self.client.get(reverse('ver_carrito'))
+
+        self.assertContains(respuesta, 'kiosco-salir')
+        self.assertContains(respuesta, 'Hola, Ana')
+
+
+class EntregaTarjetaMensajeTests(TestCase):
+    """Al contratar el Sweet Plan la página confirma la entrega simulada de la tarjeta."""
+
+    def setUp(self) -> None:
+        self.usuario = User.objects.create_user('ana', password='clave-segura-123')
+        self.client.force_login(self.usuario)
+
+    def mensajes_al_contratar(self) -> list[str]:
+        respuesta = self.client.post(reverse('confirmar_suscripcion'), follow=True)
+        return [str(m) for m in respuesta.context['messages']]
+
+    def test_con_tarjeta_libre_muestra_la_terminacion(self) -> None:
+        TarjetaRFID.objects.create(uid='A1B2C3D4')
+        mensajes = self.mensajes_al_contratar()
+        self.assertTrue(any('termina en …D4' in m for m in mensajes), mensajes)
+
+    def test_sin_tarjetas_libres_esta_en_camino(self) -> None:
+        mensajes = self.mensajes_al_contratar()
+        self.assertIn('Tu tarjeta VIP está en camino.', mensajes)

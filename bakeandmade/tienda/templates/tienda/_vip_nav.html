@@ -1,0 +1,12 @@
+{% comment %}
+Parte VIP de la barra de navegación. Se incluye dentro del <nav> de cada página.
+Solo aparece con una sesión Sweet vigente (VIP = Sweet Plan).
+TODO fase 8: el enlace pasa a /vip/ cuando exista la página de membresía.
+{% endcomment %}
+{% if vip_activo %}
+    <a href="{% url 'suscripcion' %}" class="nav-vip">Membresía VIP</a>
+    <span class="vip-badge{% if vip_es_cumpleanios %} vip-badge-cumple{% endif %}"
+          title="Descuento aplicado a tu carrito">
+        {% if vip_es_cumpleanios %}Cumpleaños{% else %}VIP{% endif %} −{{ vip_porcentaje }} %
+    </span>
+{% endif %}

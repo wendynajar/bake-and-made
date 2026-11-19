@@ -127,17 +127,22 @@ class PerfilVIP(models.Model):
 
     # --- Descuento -----------------------------------------------------------
 
-    def descuento_vigente(self, hoy: datetime.date | None = None) -> tuple[Decimal, str]:
+    def descuento_vigente(
+        self, hoy: datetime.date | None = None, sweet_vigente: bool | None = None
+    ) -> tuple[Decimal, str]:
         """Devuelve (fracción, motivo) del descuento que le toca hoy.
 
         Sweet vigente: 20 % ("vip"), o 50 % ("cumpleanios") el día de su
         cumpleaños, que reemplaza al 20 %. Sin Sweet vigente: (0, "").
         Los motivos coinciden con `tienda.models.Pedido.MOTIVOS_DESCUENTO`.
+        `sweet_vigente` permite reutilizar el plan ya calculado en la petición.
         """
         from tienda.models import Pedido
 
         hoy = hoy or timezone.localdate()
-        if not self.es_sweet_vigente():
+        if sweet_vigente is None:
+            sweet_vigente = self.es_sweet_vigente()
+        if not sweet_vigente:
             return SIN_DESCUENTO
         if self.es_cumpleanios(hoy):
             return Decimal(settings.VIP_DESCUENTO_CUMPLE), Pedido.MOTIVO_CUMPLEANIOS
