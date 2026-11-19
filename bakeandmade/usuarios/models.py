@@ -7,17 +7,36 @@ el cumpleaños con el que se calcula el descuento VIP (ver docs/IOT_VIP_SPEC.md)
 
 from __future__ import annotations
 
+import calendar
+import datetime
+from decimal import Decimal
+
 from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.db import models
+from django.utils import timezone
+
+SIN_DESCUENTO = (Decimal('0'), '')
+"""Resultado de `descuento_vigente()` cuando no aplica ningún descuento."""
+
+FECHA_NACIMIENTO_MINIMA = datetime.date(1900, 1, 1)
+
+
+class CumpleYaRegistrado(Exception):
+    """El usuario ya registró su cumpleaños; solo el admin puede cambiarlo."""
+
+
+class FechaCumpleInvalida(ValueError):
+    """La fecha de cumpleaños es futura o imposible."""
 
 
 class PerfilVIP(models.Model):
-    """Datos extra del usuario que necesita la membresía VIP.
+    """Datos extra del usuario y su lógica de descuento (fat model).
 
     Existe aunque el usuario todavía no tenga tarjeta: la tarjeta (`iot.TarjetaRFID`)
-    es inventario físico y el perfil es dato de la persona. La lógica de descuento
-    y cumpleaños se agrega en la fase 3 de la especificación.
+    es inventario físico y el perfil es dato de la persona. Este modelo es el único
+    que decide qué descuento le toca a un usuario; `tienda.models.descuento_para`
+    solo lo expone a vistas y checkout.
     """
 
     usuario = models.OneToOneField(
@@ -53,3 +72,73 @@ class PerfilVIP(models.Model):
         """
         perfil, _ = cls.objects.get_or_create(usuario=usuario)
         return perfil
+
+    # --- Membresía -----------------------------------------------------------
+
+    def es_sweet_vigente(self) -> bool:
+        """True si el usuario tiene el Sweet Plan pagado para hoy.
+
+        VIP y Sweet Plan son lo mismo: no importa si inició sesión con contraseña
+        o con la tarjeta. Una suscripción cancelada vale hasta su `fecha_fin`.
+        """
+        # Import local: tienda.models importa este módulo (evita el ciclo).
+        from tienda.models import PLAN_SWEET, Suscripcion
+
+        return Suscripcion.objects.plan_de(self.usuario) == PLAN_SWEET
+
+    # --- Cumpleaños ----------------------------------------------------------
+
+    def registrar_cumpleanios(self, fecha: datetime.date, hoy: datetime.date) -> None:
+        """Guarda el cumpleaños una sola vez.
+
+        Lanza `CumpleYaRegistrado` si ya existe (solo el admin lo corrige) y
+        `FechaCumpleInvalida` si la fecha es futura o anterior a 1900. El UPDATE
+        condicionado evita que dos peticiones simultáneas lo registren dos veces.
+        """
+        if fecha > hoy or fecha < FECHA_NACIMIENTO_MINIMA:
+            raise FechaCumpleInvalida('La fecha de cumpleaños no es válida.')
+        if self.fecha_nacimiento is not None:
+            raise CumpleYaRegistrado('El cumpleaños ya está registrado.')
+
+        if self.pk is None:
+            self.save()
+        actualizados = PerfilVIP.objects.filter(
+            pk=self.pk, fecha_nacimiento__isnull=True
+        ).update(fecha_nacimiento=fecha, cumple_registrado_en=hoy)
+        if actualizados == 0:
+            self.refresh_from_db(fields=['fecha_nacimiento', 'cumple_registrado_en'])
+            raise CumpleYaRegistrado('El cumpleaños ya está registrado.')
+        self.fecha_nacimiento = fecha
+        self.cumple_registrado_en = hoy
+
+    def es_cumpleanios(self, hoy: datetime.date) -> bool:
+        """True si hoy es su cumpleaños y no lo registró hoy mismo.
+
+        La excepción del mismo día evita que alguien registre "hoy" solo para
+        obtener el 50 %. Quien nació el 29 de febrero lo celebra el 28 en años
+        no bisiestos.
+        """
+        nacimiento = self.fecha_nacimiento
+        if nacimiento is None or self.cumple_registrado_en == hoy:
+            return False
+        if (nacimiento.month, nacimiento.day) == (2, 29) and not calendar.isleap(hoy.year):
+            return (hoy.month, hoy.day) == (2, 28)
+        return (nacimiento.month, nacimiento.day) == (hoy.month, hoy.day)
+
+    # --- Descuento -----------------------------------------------------------
+
+    def descuento_vigente(self, hoy: datetime.date | None = None) -> tuple[Decimal, str]:
+        """Devuelve (fracción, motivo) del descuento que le toca hoy.
+
+        Sweet vigente: 20 % ("vip"), o 50 % ("cumpleanios") el día de su
+        cumpleaños, que reemplaza al 20 %. Sin Sweet vigente: (0, "").
+        Los motivos coinciden con `tienda.models.Pedido.MOTIVOS_DESCUENTO`.
+        """
+        from tienda.models import Pedido
+
+        hoy = hoy or timezone.localdate()
+        if not self.es_sweet_vigente():
+            return SIN_DESCUENTO
+        if self.es_cumpleanios(hoy):
+            return Decimal(settings.VIP_DESCUENTO_CUMPLE), Pedido.MOTIVO_CUMPLEANIOS
+        return Decimal(settings.VIP_DESCUENTO), Pedido.MOTIVO_VIP

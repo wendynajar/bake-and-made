@@ -190,6 +190,14 @@ STORAGES = {
 }
 
 
+# --- Membresía VIP (docs/IOT_VIP_SPEC.md) -------------------------------------
+# Fracciones como texto para convertirlas a Decimal sin errores de float.
+# Son reglas de negocio, no credenciales: viven aquí y no en variables de entorno.
+
+VIP_DESCUENTO = '0.20'          # Sweet Plan vigente
+VIP_DESCUENTO_CUMPLE = '0.50'   # Sweet Plan vigente, el día de su cumpleaños
+
+
 # --- Correo --------------------------------------------------------------------
 
 MAILERS = {

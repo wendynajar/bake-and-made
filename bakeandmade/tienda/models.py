@@ -14,7 +14,7 @@ import uuid
 from calendar import monthrange
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from django.apps import apps
@@ -23,6 +23,8 @@ from django.contrib.auth.models import AnonymousUser, User
 from django.db import models, transaction
 from django.db.models import F
 from django.utils import timezone
+
+from usuarios.models import SIN_DESCUENTO, PerfilVIP
 
 UsuarioOAnonimo = AbstractBaseUser | AnonymousUser
 
@@ -36,6 +38,32 @@ PRECIO_SWEET_PLAN = Decimal('99.00')
 
 PLAN_BASIC = 'basic'
 PLAN_SWEET = 'sweet'
+
+CENTAVO = Decimal('0.01')
+
+
+def descuento_para(
+    usuario: UsuarioOAnonimo, hoy: datetime.date | None = None
+) -> tuple[Decimal, str]:
+    """Punto único para vistas y checkout: (fracción, motivo) del descuento del usuario.
+
+    Anónimo: sin descuento. Autenticado: lo decide `PerfilVIP.descuento_vigente()`.
+    No crea el perfil si no existe (un usuario sin perfil no tiene cumpleaños),
+    así consultar el descuento nunca escribe en la base de datos.
+    """
+    if not getattr(usuario, 'is_authenticated', False):
+        return SIN_DESCUENTO
+    perfil = PerfilVIP.objects.filter(usuario=usuario).first() or PerfilVIP(usuario=usuario)
+    return perfil.descuento_vigente(hoy)
+
+
+def aplicar_descuento(precio: Decimal, descuento: Decimal) -> Decimal:
+    """Precio final con el descuento aplicado, redondeado a centavos (ROUND_HALF_UP).
+
+    Se redondea por línea y el total es la suma de líneas, para que lo que ve el
+    cliente coincida con lo que se guarda en el pedido.
+    """
+    return (precio * (Decimal('1') - descuento)).quantize(CENTAVO, rounding=ROUND_HALF_UP)
 
 
 def sumar_un_mes(fecha: datetime.date) -> datetime.date:

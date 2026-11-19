@@ -15,7 +15,7 @@ from django.utils import timezone
 from iot.models import TarjetaRFID
 from tienda.models import PLAN_SWEET, Suscripcion
 
-from .models import PerfilVIP
+from .models import CumpleYaRegistrado, FechaCumpleInvalida, PerfilVIP
 
 
 class RegistroTests(TestCase):
@@ -133,3 +133,48 @@ class UsuariosDemoTests(TestCase):
 
         inventario.refresh_from_db()
         self.assertIsNone(inventario.usuario)
+
+
+class CumpleaniosTests(TestCase):
+    """El cumpleaños se registra una sola vez y no puede ser futuro."""
+
+    HOY = datetime.date(2026, 11, 18)
+
+    def setUp(self) -> None:
+        self.usuario = User.objects.create_user('hugo', password='x-clave-segura-1')
+
+    def test_primer_registro_se_guarda_con_la_fecha_de_registro(self) -> None:
+        PerfilVIP.de(self.usuario).registrar_cumpleanios(datetime.date(1995, 3, 14), self.HOY)
+
+        perfil = PerfilVIP.objects.get(usuario=self.usuario)
+        self.assertEqual(perfil.fecha_nacimiento, datetime.date(1995, 3, 14))
+        self.assertEqual(perfil.cumple_registrado_en, self.HOY)
+
+    def test_funciona_aunque_el_perfil_no_exista_todavia(self) -> None:
+        PerfilVIP(usuario=self.usuario).registrar_cumpleanios(datetime.date(1995, 3, 14), self.HOY)
+        self.assertEqual(PerfilVIP.objects.get().fecha_nacimiento, datetime.date(1995, 3, 14))
+
+    def test_segundo_intento_no_cambia_nada(self) -> None:
+        perfil = PerfilVIP.de(self.usuario)
+        perfil.registrar_cumpleanios(datetime.date(1995, 3, 14), self.HOY)
+
+        with self.assertRaises(CumpleYaRegistrado):
+            perfil.registrar_cumpleanios(datetime.date(1990, 1, 1), self.HOY)
+        perfil.refresh_from_db()
+        self.assertEqual(perfil.fecha_nacimiento, datetime.date(1995, 3, 14))
+
+    def test_una_copia_vieja_del_perfil_tampoco_lo_cambia(self) -> None:
+        copia_vieja = PerfilVIP.de(self.usuario)
+        PerfilVIP.de(self.usuario).registrar_cumpleanios(datetime.date(1995, 3, 14), self.HOY)
+
+        with self.assertRaises(CumpleYaRegistrado):
+            copia_vieja.registrar_cumpleanios(datetime.date(1990, 1, 1), self.HOY)
+        self.assertEqual(PerfilVIP.objects.get().fecha_nacimiento, datetime.date(1995, 3, 14))
+
+    def test_fecha_futura_o_imposible_es_invalida(self) -> None:
+        perfil = PerfilVIP.de(self.usuario)
+        for fecha in (self.HOY + datetime.timedelta(days=1), datetime.date(1899, 12, 31)):
+            with self.subTest(fecha=fecha), self.assertRaises(FechaCumpleInvalida):
+                perfil.registrar_cumpleanios(fecha, self.HOY)
+        perfil.refresh_from_db()
+        self.assertIsNone(perfil.fecha_nacimiento)

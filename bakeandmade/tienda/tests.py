@@ -5,11 +5,13 @@ import uuid
 from decimal import Decimal
 from io import StringIO
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AnonymousUser, User
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
+
+from usuarios.models import PerfilVIP
 
 from .models import (
     PLAN_BASIC,
@@ -23,6 +25,8 @@ from .models import (
     PrecioCambiado,
     StockInsuficiente,
     Suscripcion,
+    aplicar_descuento,
+    descuento_para,
     sumar_un_mes,
 )
 
@@ -238,3 +242,98 @@ class IngredientesExclusivosTests(TestCase):
 
         self.assertNotIn('Red velvet', bases_basic)
         self.assertIn('Red velvet', bases_sweet)
+
+
+class DescuentoVIPTests(TestCase):
+    """Reglas de descuento: 20 % Sweet, 50 % en su cumpleaños, 0 % sin Sweet."""
+
+    HOY = datetime.date(2026, 11, 18)
+
+    def setUp(self) -> None:
+        self.usuario = User.objects.create_user('gabi', password='clave-segura-123')
+
+    def con_cumple(self, nacimiento: datetime.date, registrado: datetime.date) -> None:
+        PerfilVIP.objects.update_or_create(
+            usuario=self.usuario,
+            defaults={'fecha_nacimiento': nacimiento, 'cumple_registrado_en': registrado},
+        )
+
+    def test_anonimo_sin_descuento(self) -> None:
+        self.assertEqual(descuento_para(AnonymousUser(), self.HOY), (Decimal('0'), ''))
+
+    def test_basic_sin_descuento_y_sin_crear_perfil(self) -> None:
+        self.assertEqual(descuento_para(self.usuario, self.HOY), (Decimal('0'), ''))
+        self.assertFalse(PerfilVIP.objects.exists())
+
+    def test_sweet_vigente_20(self) -> None:
+        Suscripcion.contratar_mes(self.usuario)
+        self.assertEqual(descuento_para(self.usuario, self.HOY), (Decimal('0.20'), Pedido.MOTIVO_VIP))
+
+    def test_sweet_cancelado_antes_de_fecha_fin_sigue_con_20(self) -> None:
+        Suscripcion.contratar_mes(self.usuario).cancelar()
+        self.assertEqual(descuento_para(self.usuario, self.HOY)[0], Decimal('0.20'))
+
+    def test_sweet_vencido_sin_descuento(self) -> None:
+        hoy = timezone.localdate()
+        Suscripcion.objects.create(
+            usuario=self.usuario,
+            estado=Suscripcion.ACTIVA,
+            fecha_inicio=hoy - datetime.timedelta(days=40),
+            fecha_fin=hoy - datetime.timedelta(days=10),
+            monto_mensual=Decimal('99.00'),
+        )
+        self.assertEqual(descuento_para(self.usuario, self.HOY), (Decimal('0'), ''))
+
+    def test_cumpleanios_de_sweet_50(self) -> None:
+        Suscripcion.contratar_mes(self.usuario)
+        self.con_cumple(datetime.date(1995, 11, 18), registrado=datetime.date(2026, 10, 1))
+        self.assertEqual(
+            descuento_para(self.usuario, self.HOY), (Decimal('0.50'), Pedido.MOTIVO_CUMPLEANIOS)
+        )
+
+    def test_cumpleanios_registrado_hoy_mismo_queda_en_20(self) -> None:
+        Suscripcion.contratar_mes(self.usuario)
+        self.con_cumple(datetime.date(1995, 11, 18), registrado=self.HOY)
+        self.assertEqual(descuento_para(self.usuario, self.HOY), (Decimal('0.20'), Pedido.MOTIVO_VIP))
+
+    def test_cumpleanios_sin_sweet_no_da_descuento(self) -> None:
+        self.con_cumple(datetime.date(1995, 11, 18), registrado=datetime.date(2026, 10, 1))
+        self.assertEqual(descuento_para(self.usuario, self.HOY), (Decimal('0'), ''))
+
+    def test_nacido_29_feb_celebra_el_28_en_anio_no_bisiesto(self) -> None:
+        Suscripcion.contratar_mes(self.usuario)
+        self.con_cumple(datetime.date(2000, 2, 29), registrado=datetime.date(2026, 1, 5))
+        casos = [
+            (datetime.date(2027, 2, 28), Decimal('0.50')),
+            (datetime.date(2027, 3, 1), Decimal('0.20')),
+            (datetime.date(2028, 2, 28), Decimal('0.20')),
+            (datetime.date(2028, 2, 29), Decimal('0.50')),
+        ]
+        for dia, esperado in casos:
+            with self.subTest(dia=dia):
+                self.assertEqual(descuento_para(self.usuario, dia)[0], esperado)
+
+
+class AplicarDescuentoTests(TestCase):
+    """Redondeo a centavos con Decimal, como en la tabla de la especificación."""
+
+    def test_redondea_a_centavos_y_devuelve_decimal(self) -> None:
+        precio = aplicar_descuento(Decimal('99.99'), Decimal('0.20'))
+        self.assertEqual(precio, Decimal('79.99'))
+        self.assertIsInstance(precio, Decimal)
+
+    def test_tabla_de_la_especificacion(self) -> None:
+        casos = [
+            (Decimal('100.00'), Decimal('0'), Decimal('100.00')),
+            (Decimal('100.00'), Decimal('0.20'), Decimal('80.00')),
+            (Decimal('100.00'), Decimal('0.50'), Decimal('50.00')),
+            (Decimal('35.00'), Decimal('0.20'), Decimal('28.00')),
+            (Decimal('35.00'), Decimal('0.50'), Decimal('17.50')),
+        ]
+        for precio, descuento, esperado in casos:
+            with self.subTest(precio=precio, descuento=descuento):
+                self.assertEqual(aplicar_descuento(precio, descuento), esperado)
+
+    def test_redondeo_half_up(self) -> None:
+        # 0.25 x 0.5 = 0.125, que con ROUND_HALF_UP queda en 0.13 (no redondeo bancario).
+        self.assertEqual(aplicar_descuento(Decimal('0.25'), Decimal('0.50')), Decimal('0.13'))
