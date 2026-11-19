@@ -16,8 +16,8 @@ from tienda.peticion import descuento_de_peticion
 def vip(request: HttpRequest) -> dict[str, Any]:
     """Estado VIP del usuario y, si el navegador es un kiosco, los datos del polling.
 
-    - vip_activo / vip_descuento / vip_motivo: para la pestaña "Membresía VIP" y
-      la etiqueta "VIP −20 %" o "Cumpleaños −50 %".
+    - vip_activo / vip_descuento / vip_motivo: para la pestaña "VIP" de la barra
+      y el renglón de descuento del carrito.
     - es_kiosco / kiosco_login_tarjeta / kiosco_version / kiosco_poll_ms: para
       cargar polling.js y la barra de "Salir" solo en las computadoras de la tienda.
     """

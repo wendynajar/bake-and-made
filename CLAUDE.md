@@ -37,7 +37,7 @@ python manage.py test               # tests de tienda y usuarios
   - `CupcakePersonalizado.PASOS`, `.calcular_precio()`, `.DIETAS`, `.COLORES_FROSTING`
 - `bakeandmade/tienda/carrito.py`: claves y lectura del carrito en la sesión.
 - `bakeandmade/tienda/peticion.py`: `plan_de_peticion()` y `descuento_de_peticion()` calculan plan y descuento **una vez por petición**; vistas y context processors deben usarlas en vez de llamar a `plan_de()` directo.
-- Plantillas: las páginas no heredan de `base.html` (cada una repite su encabezado). Lo común va en fragmentos incluidos en todas: `tienda/_vip_nav.html` (pestaña y etiqueta VIP, antes de `</nav>`) e `iot/_kiosco.html` (polling y barra del kiosco, antes de `</body>`). Contexto VIP y de kiosco en `usuarios.context_processors.vip`.
+- Plantillas: las páginas no heredan de `base.html` (cada una repite su encabezado). Lo común va en fragmentos incluidos en todas: `tienda/_vip_nav.html` (pestaña "VIP", entre el carrito y el saludo) e `iot/_kiosco.html` (polling y barra del kiosco, antes de `</body>`). Contexto VIP y de kiosco en `usuarios.context_processors.vip`.
 - `bakeandmade/tienda/views.py`: vistas delgadas (HTTP → modelos → plantilla/redirect).
 
 ## Reglas (de ARCHITECTURE.md)

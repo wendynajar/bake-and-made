@@ -60,6 +60,7 @@
                 </a>
 
 
+                {% include 'tienda/_vip_nav.html' %}
                 {% if user.is_authenticated %}
                     <span class="user-greeting">
                         Hola, {{ user.first_name|default:user.username }}
@@ -75,7 +76,6 @@
                         Mi cuenta
                     </a>
                 {% endif %}
-                {% include 'tienda/_vip_nav.html' %}
             </nav>
 
         </div>

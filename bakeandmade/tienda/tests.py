@@ -388,7 +388,7 @@ class TiendaVIPTests(TestCase):
     def test_basic_ve_la_tienda_como_hoy(self) -> None:
         self.client.force_login(self.usuario)
         respuesta = self.client.get(reverse('inicio'))
-        self.assertNotContains(respuesta, 'Membresía VIP')
+        self.assertNotContains(respuesta, 'class="nav-vip"')
         self.assertNotContains(respuesta, '<del')
         self.assertEqual(self.carrito().context['total'], Decimal('135.00'))
 
@@ -398,10 +398,25 @@ class TiendaVIPTests(TestCase):
 
         respuesta = self.client.get(reverse('inicio'))
 
-        self.assertContains(respuesta, 'Membresía VIP')
-        self.assertContains(respuesta, 'VIP −20 %')
+        self.assertContains(respuesta, 'class="nav-vip">VIP</a>')
+        self.assertNotContains(respuesta, 'Membresía VIP')
+        self.assertNotContains(respuesta, 'VIP −20 %')
         self.assertContains(respuesta, '<del aria-label="Precio normal">$100.00</del>')
         self.assertContains(respuesta, '$80.00 MXN')
+
+    def test_pestana_vip_va_entre_el_carrito_y_el_saludo(self) -> None:
+        Suscripcion.contratar_mes(self.usuario)
+        self.client.force_login(self.usuario)
+
+        for pagina in ('inicio', 'ver_carrito', 'suscripcion'):
+            with self.subTest(pagina=pagina):
+                html = self.client.get(reverse(pagina)).content.decode()
+                nav = html[html.index('<nav class="premium-nav"'):html.index('</nav>')]
+                carrito = nav.index(reverse('ver_carrito'))
+                vip = nav.index('class="nav-vip"')
+                saludo = nav.index('user-greeting')
+                self.assertLess(carrito, vip)
+                self.assertLess(vip, saludo)
 
     def test_cumpleanios_muestra_50(self) -> None:
         Suscripcion.contratar_mes(self.usuario)
@@ -417,7 +432,7 @@ class TiendaVIPTests(TestCase):
         respuesta = self.carrito()
 
         self.assertEqual(respuesta.context['total'], Decimal('67.50'))
-        self.assertContains(respuesta, 'Cumpleaños −50 %')
+        self.assertTrue(respuesta.context['vip_es_cumpleanios'])
 
     def test_el_plan_se_consulta_una_sola_vez_por_peticion(self) -> None:
         Suscripcion.contratar_mes(self.usuario)

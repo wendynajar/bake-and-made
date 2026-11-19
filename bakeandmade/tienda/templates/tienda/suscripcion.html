@@ -32,6 +32,7 @@
                     Carrito
                     {% if contador_carrito > 0 %}<span class="cart-count">{{ contador_carrito }}</span>{% endif %}
                 </a>
+                {% include 'tienda/_vip_nav.html' %}
                 {% if user.is_authenticated %}
                     <span class="user-greeting">Hola, {{ user.first_name|default:user.username }}</span>
                     <form method="POST" action="{% url 'logout' %}">
@@ -40,7 +41,6 @@
                 {% else %}
                     <a class="nav-account" href="{% url 'login' %}?next={% url 'suscripcion' %}">Mi cuenta</a>
                 {% endif %}
-                {% include 'tienda/_vip_nav.html' %}
             </nav>
         </div>
     </header>
