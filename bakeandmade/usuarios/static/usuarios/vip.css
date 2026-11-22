@@ -76,11 +76,57 @@
     color: var(--wine);
 }
 
-.vip-dato {
-    margin: 0;
+/* Cumpleaños: el día ocupa la mitad izquierda; mes y cuenta regresiva a la derecha. */
+.vip-cumple {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: center;
+    margin: 8px 0 4px;
+    padding: 18px 0;
+    border-radius: 16px;
+    background: linear-gradient(115deg, #fff9f6, #fdf0f2);
+}
+
+.vip-cumple-dia {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    border-right: 1px solid #efd9de;
     color: var(--wine);
-    font-size: 24px;
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(76px, 9vw, 118px);
     font-weight: 700;
+    line-height: 1;
+}
+
+.vip-cumple-detalle {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0 8px 0 24px;
+    min-width: 0;
+}
+
+.vip-cumple-mes {
+    color: var(--wine);
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(28px, 3.4vw, 40px);
+    font-weight: 600;
+    line-height: 1.05;
+    text-transform: capitalize;
+    overflow-wrap: anywhere;
+}
+
+.vip-cumple-cuenta {
+    margin: 0;
+    color: #785761;
+    font-size: 15px;
+}
+
+.vip-cumple-cuenta strong {
+    color: var(--rose);
+    font-size: 22px;
 }
 
 .vip-nota {
@@ -157,16 +203,33 @@
     font-size: 14px;
 }
 
+/* Video: QR y textos centrados en la tarjeta (el título sigue alineado como en las demás). */
+.vip-card-video {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.vip-card-video h2 {
+    align-self: stretch;
+    text-align: left;
+}
+
+.vip-qr {
+    display: block;
+    margin: 8px auto 0;
+    border-radius: 12px;
+}
+
 .vip-qr svg {
     display: block;
     width: min(220px, 100%);
     height: auto;
 }
 
-.vip-enlace {
-    color: var(--wine);
-    font-size: 13px;
-    overflow-wrap: anywhere;
+.vip-card-video .vip-mensaje {
+    text-align: left;
 }
 
 .vip-mensaje {

@@ -182,6 +182,39 @@ class CumpleaniosTests(TestCase):
         self.assertIsNone(perfil.fecha_nacimiento)
 
 
+class DiasParaCumpleaniosTests(TestCase):
+    """Contador de días al próximo cumpleaños que se muestra en /vip/."""
+
+    def setUp(self) -> None:
+        self.usuario = User.objects.create_user('ivan', password='x-clave-segura-1')
+
+    def perfil(self, nacimiento: datetime.date | None) -> PerfilVIP:
+        return PerfilVIP(usuario=self.usuario, fecha_nacimiento=nacimiento)
+
+    def test_sin_cumpleanios_registrado(self) -> None:
+        self.assertIsNone(self.perfil(None).dias_para_cumpleanios(datetime.date(2026, 11, 18)))
+
+    def test_hoy_manana_y_dentro_del_mismo_anio(self) -> None:
+        perfil = self.perfil(datetime.date(1995, 3, 14))
+        casos = {
+            datetime.date(2026, 3, 14): 0,
+            datetime.date(2026, 3, 13): 1,
+            datetime.date(2026, 3, 4): 10,
+        }
+        for hoy, dias in casos.items():
+            with self.subTest(hoy=hoy):
+                self.assertEqual(perfil.dias_para_cumpleanios(hoy), dias)
+
+    def test_si_ya_paso_cuenta_hasta_el_del_anio_siguiente(self) -> None:
+        perfil = self.perfil(datetime.date(1995, 3, 14))
+        self.assertEqual(perfil.dias_para_cumpleanios(datetime.date(2026, 3, 15)), 364)
+
+    def test_29_de_febrero_se_celebra_el_28_en_anio_no_bisiesto(self) -> None:
+        perfil = self.perfil(datetime.date(2000, 2, 29))
+        self.assertEqual(perfil.dias_para_cumpleanios(datetime.date(2027, 2, 27)), 1)
+        self.assertEqual(perfil.dias_para_cumpleanios(datetime.date(2028, 2, 27)), 2)
+
+
 # =============================================================================
 # Fase 8: página /vip/, calendario, cumpleaños y video del QR
 # =============================================================================
@@ -352,6 +385,16 @@ class VideoQRTests(VIPMixin, TestCase):
         self.assertContains(respuesta, f'/vip/v/{experiencia.codigo_unico}/')
         self.assertContains(respuesta, '¡Gracias, Ana!')
 
+    def test_el_qr_no_muestra_la_url_como_texto(self, _url: Any) -> None:
+        experiencia = self.crear_experiencia(horas=24)
+        self.client.force_login(self.ana)
+
+        respuesta = self.client.get(reverse('vip'))
+
+        # La URL solo va en el enlace del QR (href), no escrita en la página.
+        self.assertNotContains(respuesta, f'/vip/v/{experiencia.codigo_unico}/</a>')
+        self.assertContains(respuesta, 'Escanéalo con tu celular para ver tu video.')
+
 
 class PaginaVIPTests(VIPMixin, TestCase):
     """Acceso y contenido de /vip/."""
@@ -388,6 +431,26 @@ class PaginaVIPTests(VIPMixin, TestCase):
 
         self.assertNotContains(respuesta, 'id="form-cumple"')
         self.assertContains(respuesta, 'Para corregirla, pídelo en tienda.')
+
+    @mock.patch('usuarios.views_vip.timezone.localdate', return_value=datetime.date(2026, 3, 4))
+    def test_cumpleanios_muestra_dia_mes_y_dias_que_faltan(self, _hoy: Any) -> None:
+        PerfilVIP.objects.create(usuario=self.ana, fecha_nacimiento=datetime.date(1995, 3, 14),
+                                 cumple_registrado_en=datetime.date(2026, 1, 1))
+        self.client.force_login(self.ana)
+
+        respuesta = self.client.get(reverse('vip'))
+
+        self.assertContains(respuesta, '<span class="vip-cumple-dia">14</span>', html=True)
+        self.assertContains(respuesta, '<span class="vip-cumple-mes">Marzo</span>', html=True)
+        self.assertContains(respuesta, 'Faltan <strong>10</strong> días')
+
+    @mock.patch('usuarios.views_vip.timezone.localdate', return_value=datetime.date(2026, 3, 14))
+    def test_el_dia_del_cumpleanios_lo_dice_en_vez_del_contador(self, _hoy: Any) -> None:
+        PerfilVIP.objects.create(usuario=self.ana, fecha_nacimiento=datetime.date(1995, 3, 14),
+                                 cumple_registrado_en=datetime.date(2026, 1, 1))
+        self.client.force_login(self.ana)
+
+        self.assertContains(self.client.get(reverse('vip')), '¡Es hoy!')
 
     def test_la_pestana_vip_apunta_a_la_pagina(self) -> None:
         self.client.force_login(self.ana)

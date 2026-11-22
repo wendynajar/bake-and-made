@@ -49,6 +49,7 @@ def pagina_vip(request: HttpRequest) -> HttpResponse:
     if plan_de_peticion(request) != PLAN_SWEET:
         return redirect('suscripcion')
 
+    hoy = timezone.localdate()
     perfil = PerfilVIP.objects.filter(usuario=request.user).first() or PerfilVIP(usuario=request.user)
     experiencia = ExperienciaQR.objects.vigente_de(request.user)
     url_qr = (
@@ -63,7 +64,8 @@ def pagina_vip(request: HttpRequest) -> HttpResponse:
         'url_qr': url_qr,
         'qr_svg': _qr_svg(url_qr) if url_qr else '',
         'tipos_fecha': RecordatorioEvento.TIPOS,
-        'hoy': timezone.localdate(),
+        'hoy': hoy,
+        'dias_cumple': perfil.dias_para_cumpleanios(hoy),
     })
 
 

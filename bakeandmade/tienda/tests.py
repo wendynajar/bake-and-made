@@ -658,6 +658,52 @@ class ImagenesCatalogoTests(TestCase):
         self.assertEqual(producto.imagen.name, 'productos/nueva.jpg')
 
 
+class EncabezadoComunTests(TestCase):
+    """Todas las páginas de la tienda usan el mismo encabezado (el de "Mi carrito")."""
+
+    def setUp(self) -> None:
+        self.usuario = User.objects.create_user('lia', password='clave-segura-123', first_name='Lía')
+        self.producto = Menu.objects.create(
+            nombre_producto='Brownie', descripcion='-', precio_base=Decimal('45.00'), stock=5
+        )
+
+    def test_las_paginas_incluyen_el_encabezado_comun(self) -> None:
+        self.client.force_login(self.usuario)
+        self.client.post(reverse('agregar_carrito', args=[self.producto.pk]))
+        Suscripcion.contratar_mes(self.usuario)
+
+        for nombre in ('inicio', 'ver_carrito', 'checkout', 'suscripcion', 'personalizar', 'vip'):
+            with self.subTest(pagina=nombre):
+                respuesta = self.client.get(reverse(nombre))
+                self.assertTemplateUsed(respuesta, 'tienda/_encabezado.html')
+                self.assertContains(respuesta, 'class="premium-header"', count=1)
+                self.assertContains(respuesta, 'Hola, Lía')
+
+    def test_el_carrito_muestra_el_contador(self) -> None:
+        self.client.post(reverse('agregar_carrito', args=[self.producto.pk]))
+        self.client.post(reverse('agregar_carrito', args=[self.producto.pk]))
+
+        respuesta = self.client.get(reverse('inicio'))
+
+        self.assertContains(respuesta, '<span class="cart-count">2</span>', html=True)
+        self.assertContains(respuesta, 'Mi cuenta')
+
+
+class ImagenFaltanteTests(TestCase):
+    """Si el archivo de la imagen no existe, el navegador muestra el logo en su lugar."""
+
+    def test_la_tarjeta_trae_el_logo_de_respaldo(self) -> None:
+        Menu.objects.create(
+            nombre_producto='Brownie', descripcion='-', precio_base=Decimal('45.00'),
+            stock=5, imagen='productos/no-existe.jpg',
+        )
+
+        respuesta = self.client.get(reverse('inicio'))
+
+        self.assertContains(respuesta, '<template><div class="product-no-image">Bake & Made</div></template>')
+        self.assertContains(respuesta, 'onerror="this.replaceWith(this.previousElementSibling.content.cloneNode(true))"')
+
+
 class DescuentoVIPTests(TestCase):
     """Reglas de descuento: 20 % Sweet, 50 % en su cumpleaños, 0 % sin Sweet."""
 
