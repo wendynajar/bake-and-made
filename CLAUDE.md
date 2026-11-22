@@ -7,6 +7,7 @@
 - [docs/analisis-estado-actual.md](docs/analisis-estado-actual.md): arquitectura, modelos, rutas, hallazgos y hoja de ruta.
 - [docs/despliegue-render.md](docs/despliegue-render.md): Web Service + PostgreSQL, build y start command, variables de entorno.
 - [docs/IOT_VIP_SPEC.md](docs/IOT_VIP_SPEC.md): especificación de la capa VIP/RFID (modelos, descuentos, API, kiosco, firmware y fases).
+- [docs/diagramas.md](docs/diagramas.md): diagramas Mermaid (panorama, local vs Render, despliegue, ingredientes, login por tarjeta, descuento). Actualízalos si cambias esas piezas.
 
 ## Comandos
 ```bash
@@ -41,7 +42,7 @@ python manage.py test               # tests de tienda y usuarios
 - Plantillas: las páginas no heredan de `base.html` (cada una repite su encabezado). Lo común va en fragmentos incluidos en todas: `tienda/_vip_nav.html` (pestaña "VIP", entre el carrito y el saludo) e `iot/_kiosco.html` (polling y barra del kiosco, antes de `</body>`). Contexto VIP y de kiosco en `usuarios.context_processors.vip`.
 - `bakeandmade/tienda/views.py`: vistas delgadas (HTTP → modelos → plantilla/redirect).
 
-- `firmware/esp32-vip/`: lector RFID (PlatformIO, ESP32 + RC522). Credenciales en `include/secrets.h` (en `.gitignore`; plantilla `secrets.example.h`). Pines, LEDs y lectura de UID en su `README.md`.
+- `firmware/esp32-vip/`: lector RFID (PlatformIO, ESP32 + RC522). Credenciales en `include/secrets.h` (en `.gitignore`; plantilla `secrets.example.h`). Pines, LEDs y lectura de UID en su `README.md`. Se carga con `cargar.ps1` (Windows; PlatformIO se cuelga compilando sobre `\\wsl.localhost\...`, así que compila en una copia en `%LOCALAPPDATA%`) o `cargar.sh` (WSL, con `usbipd-win`). No es parte del despliegue en Render.
 
 ## Reglas (de ARCHITECTURE.md)
 - Apps separadas por responsabilidad: `tienda`, `usuarios` y, a futuro, `iot`.

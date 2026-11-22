@@ -1,1 +1,3 @@
 *.sh text eol=lf
+# PowerShell 5.1 espera CRLF; los .ps1 se guardan con BOM para que lea bien las tildes.
+*.ps1 text eol=crlf
