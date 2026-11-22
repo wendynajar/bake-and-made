@@ -448,19 +448,19 @@ Todo se prueba primero sin hardware: `python manage.py simular_scan <uid> --term
 
 **Prueba de humo** (en la URL de Render, con las 3 tarjetas reales y los 3 usuarios demo)
 
-- [ ] Leer los 3 UID con el monitor serie, ponerlos en `DEMO_VIP_UIDS` y desplegar: aparecen los 3 usuarios Sweet con tarjeta en el admin.
-- [ ] Subir en el admin un video a S3 para cada uno (`ExperienciaQR`).
-- [ ] Como staff, abrir `/kiosco/caja-1/` y cerrar la sesión de staff.
-- [ ] Agregar un producto y un cupcake personalizado: precio normal, sin pestaña VIP.
-- [ ] Pasar la tarjeta de Ana: en 4 s o menos aparece "Hola, Ana", "Membresía VIP" y el carrito baja 20 %.
-- [ ] En `/vip/`, registrar el cumpleaños de Ana con fecha de hoy: aparece el aviso; después ya no se puede editar y el descuento sigue en 20 %.
-- [ ] Agregar una fecha al calendario y escanear el QR con un celular: abre el video de Ana.
-- [ ] Hacer checkout: el pedido queda con 20 % y con el cupcake personalizado.
-- [ ] Pasar la tarjeta de Bruno: cambian la sesión, el calendario (sin la fecha de Ana) y el QR.
-- [ ] En el admin, poner hoy como cumpleaños de Carla con `cumple_registrado_en` en otra fecha; pasar su tarjeta: 50 % y felicitación.
-- [ ] En el admin, vencer la suscripción de Bruno y pasar su tarjeta: "Renueva tu Sweet Plan", sin sesión.
-- [ ] En otra computadora, iniciar sesión como Ana con contraseña: también ve el 20 %.
-- [ ] Esperar 5 min sin actividad en el kiosco: la sesión se cierra sola.
+- [x] Leer los 3 UID con el monitor serie, ponerlos en `DEMO_VIP_UIDS` y desplegar: aparecen los 3 usuarios Sweet con tarjeta en el admin.
+- [x] Subir en el admin un video a S3 para cada uno (`ExperienciaQR`).
+- [x] Como staff, abrir `/kiosco/caja-1/` y cerrar la sesión de staff.
+- [x] Agregar un producto y un cupcake personalizado: precio normal, sin pestaña VIP.
+- [x] Pasar la tarjeta de Ana: en 4 s o menos aparece "Hola, Ana", "Membresía VIP" y el carrito baja 20 %.
+- [x] En `/vip/`, registrar el cumpleaños de Ana con fecha de hoy: aparece el aviso; después ya no se puede editar y el descuento sigue en 20 %.
+- [x] Agregar una fecha al calendario y escanear el QR con un celular: abre el video de Ana.
+- [ ] Hacer checkout: el pedido queda con 20 % y con el cupcake personalizado. **Pendiente.**
+- [x] Pasar la tarjeta de Bruno: cambian la sesión, el calendario (sin la fecha de Ana) y el QR.
+- [ ] En el admin, poner hoy como cumpleaños de Carla con `cumple_registrado_en` en otra fecha; pasar su tarjeta: 50 % y felicitación. **Pendiente.**
+- [ ] En el admin, vencer la suscripción de Bruno y pasar su tarjeta: "Renueva tu Sweet Plan", sin sesión. **Pendiente.**
+- [x] En otra computadora, iniciar sesión como Ana con contraseña: también ve el 20 %. (Verificado con un script contra Render: mismo carrito, −20 % al iniciar sesión.)
+- [x] Esperar 5 min sin actividad en el kiosco: la sesión se cierra sola.
 
 ## Fases para Claude Code
 
@@ -477,7 +477,7 @@ Pídele a Claude Code una fase a la vez. Cada fase termina con `python manage.py
 8. **Página `/vip/`** ✅ (las vistas viven en `usuarios/views_vip.py`; el calendario recibe del servidor las ocurrencias anuales de cumpleaños y aniversarios dentro del rango que pide FullCalendar, máximo 400 días; `AWS_QUERYSTRING_EXPIRE = 3600`; la pestaña "VIP" ya apunta a `/vip/`): cumpleaños con el modal de aviso, calendario y QR con video en S3. Tests `FechasVIPTests` y `VideoQRTests`.
 9. **Despliegue** ✅ en https://bake-and-made.onrender.com (merge de `feat/iot-vip` a `feat/render-allocation`, PR #4). Verificado el 2026-11-19 con `curl`: `/healthz` 200, http→https 301, páginas 200, `/vip/` 302 al login sin sesión, APIs VIP 403 sin sesión, lector 401 sin token o con token falso y 405 por GET, estáticos nuevos publicados. Queda para la prueba de humo lo que requiere credenciales: scan con el token real, subida a S3 y flujos con sesión (Fase 4): cambios de la tabla de despliegue, variables de AWS y de demo en Render, merge a `feat/render-allocation` y `curl` a la URL de Render.
 10. **Firmware** ✅ en `firmware/esp32-vip/` (PlatformIO, `espressif32@6.9.0`, `MFRC522@1.4.11`; LED verde GPIO 25 y rojo GPIO 26; el Wi-Fi no bloquea el arranque, así los UID se pueden leer antes de configurar la red; guía en su README). Verificado el 2026-11-19 con hardware: tarjeta física → ESP32 → `/api/rfid/scan/` en Render (200) → sesión iniciada en `/kiosco/caja-1/`. Lo aprendido: los UID de `DEMO_VIP_UIDS` se registran en la base de Render con un deploy (`build.sh`), no con `crear_usuarios_demo` local, que escribe en el SQLite local; PlatformIO se cuelga al compilar sobre `\\wsl.localhost\...`, así que se carga con `cargar.ps1` (Windows: compila en una copia en `%LOCALAPPDATA%`) o `cargar.sh` (WSL, con `usbipd-win`). El firmware no forma parte del despliegue en Render.
-11. **Prueba de humo**: recorrer la lista del plan de pruebas.
+11. **Prueba de humo** 🟡 en Render, 2026-11-19 a 2026-11-22: ver la lista "Prueba de humo" del plan de pruebas. Automatizado contra Render (21/21): precios sin sesión, login de Ana y Bruno con contraseña (carrito conservado, −20 %), aislamiento del calendario y respuestas del lector (200 para las 3 tarjetas, 404, 401, UID en minúsculas). A mano con el kiosco y las tarjetas físicas: videos en S3, kiosco, login por tarjeta, cumpleaños de Ana, QR en el celular, cambio a Bruno e inactividad. Lo aprendido: el 500 al guardar una `ExperienciaQR` era un 403 de S3 en `HeadObject` por claves de AWS inválidas en Render (se generaron nuevas); el admin lo muestra como 500 en vez de un mensaje claro. **Faltan solo 3 pruebas manuales**: checkout con 20 % y cupcake personalizado, cumpleaños de Carla (50 %) y Sweet vencido de Bruno.
 
 Prompt sugerido por fase: *"Lee docs/ARCHITECTURE.md y docs/IOT\_VIP\_SPEC.md. Implementa solo la fase N siguiendo las reglas de ARCHITECTURE.md (type hints, docstrings, fat models). Escribe y corre sus tests y no avances a la siguiente fase."*
 

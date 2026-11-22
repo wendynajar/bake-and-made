@@ -7,6 +7,7 @@
 - [docs/analisis-estado-actual.md](docs/analisis-estado-actual.md): arquitectura, modelos, rutas, hallazgos y hoja de ruta.
 - [docs/despliegue-render.md](docs/despliegue-render.md): Web Service + PostgreSQL, build y start command, variables de entorno.
 - [docs/IOT_VIP_SPEC.md](docs/IOT_VIP_SPEC.md): especificación de la capa VIP/RFID (modelos, descuentos, API, kiosco, firmware y fases).
+- [docs/diagramas.md](docs/diagramas.md): diagramas Mermaid (panorama, local vs Render, despliegue, ingredientes, login por tarjeta, descuento). Actualízalos si cambias esas piezas.
 
 ## Comandos
 ```bash
