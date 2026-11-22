@@ -125,6 +125,28 @@ class PerfilVIP(models.Model):
             return (hoy.month, hoy.day) == (2, 28)
         return (nacimiento.month, nacimiento.day) == (hoy.month, hoy.day)
 
+    def _cumpleanios_en(self, anio: int) -> datetime.date:
+        """Día en que celebra en `anio` (el 29 de febrero pasa al 28 si el año no es bisiesto)."""
+        nacimiento = self.fecha_nacimiento
+        if (nacimiento.month, nacimiento.day) == (2, 29) and not calendar.isleap(anio):
+            return datetime.date(anio, 2, 28)
+        return nacimiento.replace(year=anio)
+
+    def dias_para_cumpleanios(self, hoy: datetime.date) -> int | None:
+        """Días que faltan para su próximo cumpleaños: 0 si es hoy, None si no lo registró.
+
+        Solo sirve para mostrarlo en /vip/; el descuento lo decide
+        `es_cumpleanios()`, que además excluye el día en que se registró.
+        Usa la misma regla del 29 de febrero, para que el contador llegue a 0
+        justo el día del descuento.
+        """
+        if self.fecha_nacimiento is None:
+            return None
+        proximo = self._cumpleanios_en(hoy.year)
+        if proximo < hoy:
+            proximo = self._cumpleanios_en(hoy.year + 1)
+        return (proximo - hoy).days
+
     # --- Descuento -----------------------------------------------------------
 
     def descuento_vigente(

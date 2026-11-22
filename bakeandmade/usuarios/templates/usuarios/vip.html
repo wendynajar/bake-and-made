@@ -19,31 +19,7 @@
     <script src="{% static 'usuarios/vip.js' %}" defer></script>
 </head>
 <body class="premium-site">
-    <div class="announcement"><span>✦</span> PEQUEÑOS DETALLES, GRANDES MOMENTOS <span>✦</span></div>
-
-    <header class="premium-header">
-        <div class="header-inner">
-            <a class="brand" href="{% url 'inicio' %}">
-                Bake & Made
-                <small>ARTISAN PATISSERIE</small>
-            </a>
-            <button class="mobile-menu-toggle" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="main-navigation">☰</button>
-            <nav class="premium-nav" id="main-navigation" aria-label="Navegación principal">
-                <a href="{% url 'inicio' %}">Inicio</a>
-                <a href="{% url 'inicio' %}#productos">Colección</a>
-                <a href="{% url 'suscripcion' %}">Planes</a>
-                <a href="{% url 'ver_carrito' %}" class="nav-cart">
-                    Carrito
-                    {% if contador_carrito > 0 %}<span class="cart-count">{{ contador_carrito }}</span>{% endif %}
-                </a>
-                {% include 'tienda/_vip_nav.html' %}
-                <span class="user-greeting">Hola, {{ user.first_name|default:user.username }}</span>
-                <form method="POST" action="{% url 'logout' %}">
-                    {% csrf_token %}<button type="submit" class="nav-account">Salir</button>
-                </form>
-            </nav>
-        </div>
-    </header>
+    {% include 'tienda/_encabezado.html' %}
 
     {% if messages %}
         <div class="cart-messages" role="status">
@@ -96,7 +72,21 @@
             <section class="vip-card" aria-labelledby="titulo-cumple">
                 <h2 id="titulo-cumple">Tu cumpleaños</h2>
                 {% if perfil.fecha_nacimiento %}
-                    <p class="vip-dato">{{ perfil.fecha_nacimiento|date:"j \d\e F" }}</p>
+                    <div class="vip-cumple">
+                        <span class="vip-cumple-dia">{{ perfil.fecha_nacimiento|date:"j" }}</span>
+                        <div class="vip-cumple-detalle">
+                            <span class="vip-cumple-mes">{{ perfil.fecha_nacimiento|date:"F" }}</span>
+                            <p class="vip-cumple-cuenta">
+                                {% if dias_cumple == 0 %}
+                                    ¡Es hoy!
+                                {% elif dias_cumple == 1 %}
+                                    Falta <strong>1</strong> día
+                                {% else %}
+                                    Faltan <strong>{{ dias_cumple }}</strong> días
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
                     <p class="vip-nota">Para corregirla, pídelo en tienda.</p>
                 {% else %}
                     <p>Regístralo y ese día tu descuento sube a 50 %.</p>
@@ -111,12 +101,12 @@
             </section>
 
             <!-- Video del QR -->
-            <section class="vip-card" aria-labelledby="titulo-video">
+            <section class="vip-card vip-card-video" aria-labelledby="titulo-video">
                 <h2 id="titulo-video">Mi video</h2>
                 {% if experiencia %}
-                    <div class="vip-qr" role="img" aria-label="Código QR de tu video">{{ qr_svg|safe }}</div>
-                    <p class="vip-nota">Escanéalo con tu celular o abre el enlace:</p>
-                    <a class="vip-enlace" href="{{ url_qr }}">{{ url_qr }}</a>
+                    {# El QR también es un enlace, para abrir el video desde este mismo dispositivo. #}
+                    <a class="vip-qr" href="{{ url_qr }}" aria-label="Código QR de tu video (abrir el video)">{{ qr_svg|safe }}</a>
+                    <p class="vip-nota">Escanéalo con tu celular para ver tu video.</p>
                     {% if experiencia.mensaje_texto %}
                         <blockquote class="vip-mensaje">{{ experiencia.mensaje_texto }}</blockquote>
                     {% endif %}

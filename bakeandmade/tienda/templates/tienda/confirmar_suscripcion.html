@@ -13,18 +13,7 @@
     <script src="{% static 'tienda/premium.js' %}" defer></script>
 </head>
 <body class="premium-site">
-    <div class="announcement"><span>✦</span> PEQUEÑOS DETALLES, GRANDES MOMENTOS <span>✦</span></div>
-    <header class="premium-header">
-        <div class="header-inner">
-            <a class="brand" href="{% url 'inicio' %}">Bake & Made<small>ARTISAN PATISSERIE</small></a>
-            <nav class="premium-nav" aria-label="Navegación principal">
-                <a href="{% url 'inicio' %}">Inicio</a>
-                <a href="{% url 'suscripcion' %}">Planes</a>
-                <a href="{% url 'ver_carrito' %}">Carrito</a>
-                {% include 'tienda/_vip_nav.html' %}
-            </nav>
-        </div>
-    </header>
+    {% include 'tienda/_encabezado.html' %}
     <main class="plans-page confirmation-page">
         <section class="plan-confirmation-card reveal">
             <span class="section-kicker">UN PASO MÁS HACIA TU EXPERIENCIA SWEET</span>

@@ -21,65 +21,7 @@
 
 <body class="premium-site">
 
-    <div class="announcement">
-        <span>✦</span>
-        Pequeños detalles, grandes momentos
-        <span>✦</span>
-    </div>
-
-    <header class="premium-header" id="top">
-        <div class="header-inner">
-
-            <a class="brand" href="{% url 'inicio' %}">
-                Bake <span>&</span> Made
-                <small>ARTISAN PATISSERIE</small>
-            </a>
-
-            <button class="mobile-menu-toggle"
-                    type="button"
-                    aria-label="Abrir menú"
-                    aria-expanded="false"
-                    aria-controls="main-navigation">
-                ☰
-            </button>
-
-            <nav class="premium-nav" id="main-navigation" aria-label="Navegación principal">
-                <a href="#productos">Colección</a>
-                <a href="#experiencia">Experiencia</a>
-                <a href="#nosotros">Nuestra historia</a>
-                <a href="{% url 'suscripcion' %}">Planes</a>
-                
-                <a href="{% url 'ver_carrito' %}" class="nav-cart">
-                    Carrito
-
-                    {% if contador_carrito > 0 %}
-                        <span class="cart-count">{{ contador_carrito }}</span>
-                    {% endif %}
-
-                    <span aria-hidden="true">↗</span>
-                </a>
-
-
-                {% include 'tienda/_vip_nav.html' %}
-                {% if user.is_authenticated %}
-                    <span class="user-greeting">
-                        Hola, {{ user.first_name|default:user.username }}
-                    </span>
-                    <form method="POST" action="{% url 'logout' %}">
-                        {% csrf_token %}
-                        <button type="submit" class="nav-account">
-                            Salir
-                        </button>
-                    </form>
-                {% else %}
-                    <a class="nav-account" href="{% url 'login' %}">
-                        Mi cuenta
-                    </a>
-                {% endif %}
-            </nav>
-
-        </div>
-    </header>
+    {% include 'tienda/_encabezado.html' %}
 
     {% if messages %}
         <div class="cart-messages" role="status">
@@ -139,7 +81,8 @@
                         <img class="hero-product"
                              src="{{ producto.imagen.url }}"
                              alt="{{ producto.nombre_producto }}"
-                             fetchpriority="high">
+                             fetchpriority="high"
+                             onerror="this.remove()">
                     {% endif %}
                 {% endfor %}
 
@@ -199,9 +142,12 @@
 
                         <div class="product-image-wrap">
                             {% if producto.imagen %}
+                                {# Si el archivo no existe (p. ej. aún no se sube a S3), se ve el logo como sin imagen. #}
+                                <template><div class="product-no-image">Bake & Made</div></template>
                                 <img src="{{ producto.imagen.url }}"
                                      alt="{{ producto.nombre_producto }}"
-                                     loading="lazy">
+                                     loading="lazy"
+                                     onerror="this.replaceWith(this.previousElementSibling.content.cloneNode(true))">
                             {% else %}
                                 <div class="product-no-image">
                                     Bake & Made
@@ -299,7 +245,8 @@
                     {% if forloop.first and producto.imagen %}
                         <img src="{{ producto.imagen.url }}"
                              alt="Repostería artesanal Bake & Made"
-                             loading="lazy">
+                             loading="lazy"
+                             onerror="this.remove()">
                     {% endif %}
                 {% endfor %}
 

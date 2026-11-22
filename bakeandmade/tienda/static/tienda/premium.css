@@ -66,11 +66,17 @@
 
 /* HEADER */
 
+/* estilos.css (la hoja anterior) da fondo, relleno y centrado a cualquier
+   header, nav y button. Las páginas que todavía la cargan (inicio, planes, VIP,
+   personalizar) deben ver el mismo encabezado que "Mi carrito", que no la carga:
+   por eso aquí se fijan explícitamente esos valores. */
 .premium-header {
     position: sticky;
     top: 0;
     z-index: 100;
     width: 100%;
+    padding: 0;
+    text-align: left;
     background: rgba(255, 249, 246, .93);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
@@ -117,8 +123,13 @@
 
 .premium-nav {
     display: flex;
+    flex-wrap: nowrap;
+    justify-content: normal;
     align-items: center;
     gap: clamp(15px, 2.5vw, 38px);
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
 }
 
 .premium-nav a,
@@ -154,8 +165,16 @@
     font-size: 12px;
 }
 
+/* Sin esto, el "button:hover" de estilos.css pinta de rosa estos botones. */
+.premium-site .premium-nav .nav-account:hover,
+.premium-site .mobile-menu-toggle:hover {
+    background: transparent;
+    color: var(--wine);
+}
+
 .mobile-menu-toggle {
     display: none;
+    border-radius: 0;
 }
 
 /* HERO */

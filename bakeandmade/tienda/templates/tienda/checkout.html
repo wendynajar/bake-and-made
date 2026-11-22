@@ -17,48 +17,7 @@
 
 <body class="premium-site">
 
-    <div class="announcement">
-        <span>✦</span>
-        PEQUEÑOS DETALLES, GRANDES MOMENTOS
-        <span>✦</span>
-    </div>
-
-    <header class="premium-header">
-        <div class="header-inner">
-
-            <a class="brand" href="{% url 'inicio' %}">
-                Bake & Made
-                <small>ARTISAN PATISSERIE</small>
-            </a>
-
-            <button class="mobile-menu-toggle"
-                    type="button"
-                    aria-label="Abrir menú"
-                    aria-expanded="false"
-                    aria-controls="main-navigation">
-                ☰
-            </button>
-
-            <nav class="premium-nav" id="main-navigation">
-                <a href="{% url 'inicio' %}">Inicio</a>
-                <a href="{% url 'inicio' %}#productos">Colección</a>
-                <a href="{% url 'ver_carrito' %}" class="nav-cart">
-                    Mi carrito
-                    {% if contador_carrito > 0 %}
-                        <span class="cart-count">{{ contador_carrito }}</span>
-                    {% endif %}
-                </a>
-
-                {% include 'tienda/_vip_nav.html' %}
-                {% if user.is_authenticated %}
-                    <span class="user-greeting">
-                        Hola, {{ user.first_name|default:user.username }}
-                    </span>
-                {% endif %}
-            </nav>
-
-        </div>
-    </header>
+    {% include 'tienda/_encabezado.html' %}
 
     {% if messages %}
         <div class="cart-messages" role="status">
@@ -181,8 +140,10 @@
 
                         <div class="checkout-product-image">
                             {% if item.tipo == 'normal' and item.producto.imagen %}
+                                <template><span>✦</span></template>
                                 <img src="{{ item.producto.imagen.url }}"
-                                     alt="{{ item.producto.nombre_producto }}">
+                                     alt="{{ item.producto.nombre_producto }}"
+                                     onerror="this.replaceWith(this.previousElementSibling.content.cloneNode(true))">
                             {% else %}
                                 <span>✦</span>
                             {% endif %}

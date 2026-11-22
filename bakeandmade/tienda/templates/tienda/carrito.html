@@ -20,55 +20,7 @@
 
 <body class="premium-site">
 
-    <div class="announcement">
-        <span>✦</span>
-        PEQUEÑOS DETALLES, GRANDES MOMENTOS
-        <span>✦</span>
-    </div>
-
-    <header class="premium-header">
-        <div class="header-inner">
-
-            <a class="brand" href="{% url 'inicio' %}">
-                Bake & Made
-                <small>ARTISAN PATISSERIE</small>
-            </a>
-
-            <button class="mobile-menu-toggle"
-                    type="button"
-                    aria-label="Abrir menú"
-                    aria-expanded="false"
-                    aria-controls="main-navigation">
-                ☰
-            </button>
-
-            <nav class="premium-nav" id="main-navigation">
-                <a href="{% url 'inicio' %}">Inicio</a>
-                <a href="{% url 'inicio' %}#productos">Colección</a>
-                <a href="{% url 'inicio' %}#nosotros">Nuestra historia</a>
-                <a href="{% url 'suscripcion' %}">Planes</a>
-                <a href="{% url 'ver_carrito' %}">Mi carrito</a>
-
-                {% include 'tienda/_vip_nav.html' %}
-                {% if user.is_authenticated %}
-                    <span class="user-greeting">
-                        Hola, {{ user.first_name|default:user.username }}
-                    </span>
-                    <form method="POST" action="{% url 'logout' %}">
-                        {% csrf_token %}
-                        <button class="nav-account" type="submit">
-                            Salir
-                        </button>
-                    </form>
-                {% else %}
-                    <a class="nav-account" href="{% url 'login' %}">
-                        Mi cuenta
-                    </a>
-                {% endif %}
-            </nav>
-
-        </div>
-    </header>
+    {% include 'tienda/_encabezado.html' %}
 
     <main class="cart-page">
 
@@ -120,9 +72,11 @@
                                 {% if item.tipo == 'personalizado' %}
                                     <span>♡ Bake & Made</span>
                                 {% elif item.producto.imagen %}
+                                    <template><span>Bake & Made</span></template>
                                     <img
                                         src="{{ item.producto.imagen.url }}"
                                         alt="{{ item.producto.nombre_producto }}"
+                                        onerror="this.replaceWith(this.previousElementSibling.content.cloneNode(true))"
                                     >
                                 {% else %}
                                     <span>Bake & Made</span>
