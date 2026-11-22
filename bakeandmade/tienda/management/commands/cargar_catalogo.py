@@ -1,6 +1,8 @@
 """Comando `cargar_catalogo`: datos iniciales del catálogo (se puede ejecutar varias veces).
 
 Usa get_or_create, por lo que es seguro incluirlo en el build de Render.
+Crea lo que falte y no modifica lo existente; la única excepción es completar la
+imagen de un producto que no tenga ninguna.
 """
 
 from decimal import Decimal
@@ -41,6 +43,25 @@ PRODUCTOS = [
      "Selección de postres artesanales para regalar."),
 ]
 
+IMAGENES = {
+    "Cupcake red velvet": "productos/crv.jpg",
+    "Cupcake de fresa": "productos/cf1.jpg",
+    "Cupcake de zanahoria": "productos/cz.jpg",
+
+    "Galleta con chispas de chocolate": "productos/gcc.jpg",
+    "Galleta red velvet": "productos/grv.jpg",
+    "Galleta de mantequilla": "productos/gm.jpg",
+
+    "Brownie de chocolate": "productos/bc.jpg",
+    "Cheesecake de fresa": "productos/cf.jpg",
+
+    "Pastel de chocolate": "productos/pc.jpg",
+    "Pastel de tres leches": "productos/ptl.jpg",
+    "Pastel de zanahoria": "productos/pz.jpg",
+
+    "Caja de 6 cupcakes": "productos/csc.jpg",
+    "Caja de regalo dulce": "productos/crd.jpg",
+}
 CATEGORIAS_INGREDIENTES = [
     "Base",
     "Relleno",
@@ -155,7 +176,16 @@ class Command(BaseCommand):
                 nombre=categoria_nombre
             )
 
-            if Menu.objects.filter(nombre_producto=nombre).exists():
+            imagen = IMAGENES.get(nombre, "")
+            producto = Menu.objects.filter(nombre_producto=nombre).first()
+
+            if producto:
+                # Solo completa la imagen si falta: la que se ponga en el admin manda.
+                if imagen and not producto.imagen:
+                    producto.imagen = imagen
+                    producto.save(update_fields=["imagen"])
+                    self.stdout.write(f"Imagen asignada: {nombre}")
+
                 existentes += 1
                 self.stdout.write(f"Ya existe: {nombre}")
                 continue
@@ -166,7 +196,8 @@ class Command(BaseCommand):
                 precio_base=Decimal(precio),
                 disponible=True,
                 categoria=categoria,
-                stock=20
+                stock=20,
+                imagen=imagen,
             )
 
             creados += 1

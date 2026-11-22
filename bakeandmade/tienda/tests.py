@@ -528,6 +528,35 @@ class IngredientesExclusivosTests(TestCase):
         self.assertIn('Red velvet', bases_sweet)
 
 
+class ImagenesCatalogoTests(TestCase):
+    """`cargar_catalogo` pone la imagen de cada producto sin pisar la del admin."""
+
+    def test_crea_los_productos_con_su_imagen(self) -> None:
+        call_command('cargar_catalogo', stdout=StringIO())
+
+        producto = Menu.objects.get(nombre_producto='Cupcake red velvet')
+        self.assertEqual(producto.imagen.name, 'productos/crv.jpg')
+
+    def test_completa_la_imagen_de_un_producto_existente_sin_imagen(self) -> None:
+        Menu.objects.create(nombre_producto='Cupcake red velvet', descripcion='-', precio_base=Decimal('45.00'))
+
+        call_command('cargar_catalogo', stdout=StringIO())
+
+        producto = Menu.objects.get(nombre_producto='Cupcake red velvet')
+        self.assertEqual(producto.imagen.name, 'productos/crv.jpg')
+
+    def test_no_reemplaza_la_imagen_puesta_en_el_admin(self) -> None:
+        Menu.objects.create(
+            nombre_producto='Cupcake red velvet', descripcion='-',
+            precio_base=Decimal('45.00'), imagen='productos/nueva.jpg',
+        )
+
+        call_command('cargar_catalogo', stdout=StringIO())
+
+        producto = Menu.objects.get(nombre_producto='Cupcake red velvet')
+        self.assertEqual(producto.imagen.name, 'productos/nueva.jpg')
+
+
 class DescuentoVIPTests(TestCase):
     """Reglas de descuento: 20 % Sweet, 50 % en su cumpleaños, 0 % sin Sweet."""
 
