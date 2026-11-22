@@ -24,6 +24,7 @@ from .carrito import (
     obtener_carrito,
     obtener_personalizados,
 )
+from .forms import DireccionEntregaForm
 from .models import (
     PLAN_BASIC,
     PLAN_SWEET,
@@ -302,12 +303,14 @@ def checkout(request: HttpRequest) -> HttpResponse:
         request.session['checkout_token'] = str(uuid.uuid4())
         request.session['checkout_total'] = str(total)
 
+    form_direccion = DireccionEntregaForm(request.POST if request.method == 'POST' else None)
     contexto = {
         'productos_carrito': [linea.as_dict(descuento) for linea in lineas],
         'subtotal': subtotal,
         'ahorro': subtotal - total,
         'total': total,
         'checkout_token': request.session.get('checkout_token'),
+        'form_direccion': form_direccion,
     }
 
     if request.method != 'POST':
@@ -318,10 +321,11 @@ def checkout(request: HttpRequest) -> HttpResponse:
         messages.error(request, 'La solicitud de compra no es válida o ya fue procesada.')
         return redirect('ver_carrito')
 
-    direccion = request.POST.get('direccion_entrega', '').strip()
-    if not direccion or len(direccion) > 1000:
-        messages.error(request, 'Ingresa una dirección válida de hasta 1000 caracteres.')
+    # Con error se vuelve a mostrar el formulario con lo que el cliente ya escribió.
+    if not form_direccion.is_valid():
+        messages.error(request, 'Revisa los datos de tu dirección de entrega.')
         return render(request, 'tienda/checkout.html', contexto)
+    direccion = form_direccion.como_texto()
 
     if request.session.get('checkout_total') != str(total):
         messages.warning(

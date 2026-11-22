@@ -16,6 +16,7 @@ from django.utils import timezone
 from iot.models import TarjetaRFID
 from usuarios.models import PerfilVIP
 
+from .forms import DireccionEntregaForm
 from .models import (
     PLAN_BASIC,
     PLAN_SWEET,
@@ -33,6 +34,19 @@ from .models import (
     descuento_para,
     sumar_un_mes,
 )
+
+
+# Dirección válida para los POST del checkout (campos de DireccionEntregaForm).
+DIRECCION = {
+    'calle': 'Av. Siempre Viva',
+    'numero_exterior': '742',
+    'numero_interior': '',
+    'colonia': 'Centro',
+    'codigo_postal': '06000',
+    'ciudad': 'Cuauhtémoc',
+    'estado': 'CDMX',
+    'referencias': '',
+}
 
 
 class SumarUnMesTests(TestCase):
@@ -170,7 +184,7 @@ class CheckoutVistaTests(TestCase):
 
         respuesta = self.client.post(reverse('checkout'), {
             'checkout_token': token,
-            'direccion_entrega': 'Av. Siempre Viva 742',
+            **DIRECCION,
         })
 
         pedido = Pedido.objects.get()
@@ -181,13 +195,100 @@ class CheckoutVistaTests(TestCase):
         self.client.post(reverse('agregar_carrito', args=[self.producto.pk]))
         self.client.get(reverse('checkout'))
         token = self.client.session['checkout_token']
-        datos = {'checkout_token': token, 'direccion_entrega': 'Calle 2'}
+        datos = {'checkout_token': token, **DIRECCION}
 
         self.client.post(reverse('checkout'), datos)
         self.client.post(reverse('agregar_carrito', args=[self.producto.pk]))
         self.client.post(reverse('checkout'), datos)
 
         self.assertEqual(Pedido.objects.count(), 1)
+
+
+class DireccionEntregaFormTests(TestCase):
+    """La dirección se captura por campos y se guarda como un solo texto legible."""
+
+    def test_arma_la_direccion_con_todos_los_campos(self) -> None:
+        form = DireccionEntregaForm({
+            **DIRECCION, 'numero_interior': '3B', 'referencias': 'Portón rosa,\n junto a la farmacia',
+        })
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(
+            form.como_texto(),
+            'Av. Siempre Viva 742, int. 3B, col. Centro, C.P. 06000, Cuauhtémoc, CDMX. '
+            'Referencias: Portón rosa, junto a la farmacia',
+        )
+
+    def test_omite_los_campos_opcionales_vacios(self) -> None:
+        form = DireccionEntregaForm(DIRECCION)
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(
+            form.como_texto(), 'Av. Siempre Viva 742, col. Centro, C.P. 06000, Cuauhtémoc, CDMX'
+        )
+
+    def test_codigo_postal_debe_tener_5_digitos(self) -> None:
+        for codigo in ('0600', '060000', '06A00', ''):
+            with self.subTest(codigo=codigo):
+                form = DireccionEntregaForm({**DIRECCION, 'codigo_postal': codigo})
+                self.assertFalse(form.is_valid())
+                self.assertIn('codigo_postal', form.errors)
+
+    def test_campos_obligatorios(self) -> None:
+        form = DireccionEntregaForm({**DIRECCION, 'calle': '  ', 'colonia': ''})
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(set(form.errors), {'calle', 'colonia'})
+
+    def test_respeta_las_longitudes_maximas(self) -> None:
+        form = DireccionEntregaForm({**DIRECCION, 'referencias': 'x' * 501})
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('referencias', form.errors)
+
+
+class DireccionCheckoutVistaTests(TestCase):
+    """El checkout muestra los campos de dirección y guarda el texto armado."""
+
+    def setUp(self) -> None:
+        self.usuario = User.objects.create_user('dani', password='clave-segura-123')
+        self.producto = Menu.objects.create(
+            nombre_producto='Brownie', descripcion='-', precio_base=Decimal('45.00'), stock=5
+        )
+        self.client.force_login(self.usuario)
+        self.client.post(reverse('agregar_carrito', args=[self.producto.pk]))
+
+    def test_el_formulario_tiene_los_campos_nuevos_y_no_el_viejo(self) -> None:
+        respuesta = self.client.get(reverse('checkout'))
+
+        for campo in ('calle', 'numero_exterior', 'numero_interior', 'colonia',
+                      'codigo_postal', 'ciudad', 'estado', 'referencias'):
+            self.assertContains(respuesta, f'name="{campo}"')
+        self.assertNotContains(respuesta, 'name="direccion_entrega"')
+
+    def test_guarda_la_direccion_armada(self) -> None:
+        self.client.get(reverse('checkout'))
+        self.client.post(reverse('checkout'), {
+            'checkout_token': self.client.session['checkout_token'], **DIRECCION,
+        })
+
+        self.assertEqual(
+            Pedido.objects.get().direccion_entrega,
+            'Av. Siempre Viva 742, col. Centro, C.P. 06000, Cuauhtémoc, CDMX',
+        )
+
+    def test_direccion_invalida_no_crea_pedido_y_conserva_lo_escrito(self) -> None:
+        self.client.get(reverse('checkout'))
+        respuesta = self.client.post(reverse('checkout'), {
+            'checkout_token': self.client.session['checkout_token'],
+            **DIRECCION, 'codigo_postal': '123',
+        })
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(Pedido.objects.count(), 0)
+        self.assertContains(respuesta, 'value="Av. Siempre Viva"')
+        self.assertContains(respuesta, 'value="123"')
+        self.assertContains(respuesta, 'El código postal debe tener 5 dígitos.')
 
 
 class CarritoConCupcakesMixin:
@@ -237,7 +338,7 @@ class CarritoConCupcakesMixin:
         self.client.get(reverse('checkout'))
         return self.client.post(reverse('checkout'), {
             'checkout_token': self.client.session.get('checkout_token', ''),
-            'direccion_entrega': 'Calle 3',
+            **DIRECCION,
         })
 
     def stock(self, slug: str) -> int:
@@ -423,7 +524,7 @@ class CheckoutVIPTests(CarritoConCupcakesMixin, TestCase):
 
         respuesta = self.client.post(reverse('checkout'), {
             'checkout_token': self.client.session['checkout_token'],
-            'direccion_entrega': 'Calle 3',
+            **DIRECCION,
         }, follow=True)
         self.assertContains(respuesta, 'Descuento aplicado')
         self.assertContains(respuesta, 'VIP')
@@ -433,7 +534,7 @@ class CheckoutVIPTests(CarritoConCupcakesMixin, TestCase):
         self.hacer_sweet()
         self.con_carrito([self.cupcake()])
         self.client.get(reverse('checkout'))
-        datos = {'checkout_token': self.client.session['checkout_token'], 'direccion_entrega': 'x'}
+        datos = {'checkout_token': self.client.session['checkout_token'], **DIRECCION}
 
         self.client.post(reverse('checkout'), datos)
         self.con_carrito([self.cupcake()])
@@ -452,7 +553,7 @@ class CheckoutVIPTests(CarritoConCupcakesMixin, TestCase):
             fecha_fin=timezone.localdate() - datetime.timedelta(days=1)
         )
         respuesta = self.client.post(reverse('checkout'), {
-            'checkout_token': token, 'direccion_entrega': 'x',
+            'checkout_token': token, **DIRECCION,
         })
 
         self.assertRedirects(respuesta, reverse('checkout'), fetch_redirect_response=False)
@@ -526,6 +627,35 @@ class IngredientesExclusivosTests(TestCase):
 
         self.assertNotIn('Red velvet', bases_basic)
         self.assertIn('Red velvet', bases_sweet)
+
+
+class ImagenesCatalogoTests(TestCase):
+    """`cargar_catalogo` pone la imagen de cada producto sin pisar la del admin."""
+
+    def test_crea_los_productos_con_su_imagen(self) -> None:
+        call_command('cargar_catalogo', stdout=StringIO())
+
+        producto = Menu.objects.get(nombre_producto='Cupcake red velvet')
+        self.assertEqual(producto.imagen.name, 'productos/crv.jpg')
+
+    def test_completa_la_imagen_de_un_producto_existente_sin_imagen(self) -> None:
+        Menu.objects.create(nombre_producto='Cupcake red velvet', descripcion='-', precio_base=Decimal('45.00'))
+
+        call_command('cargar_catalogo', stdout=StringIO())
+
+        producto = Menu.objects.get(nombre_producto='Cupcake red velvet')
+        self.assertEqual(producto.imagen.name, 'productos/crv.jpg')
+
+    def test_no_reemplaza_la_imagen_puesta_en_el_admin(self) -> None:
+        Menu.objects.create(
+            nombre_producto='Cupcake red velvet', descripcion='-',
+            precio_base=Decimal('45.00'), imagen='productos/nueva.jpg',
+        )
+
+        call_command('cargar_catalogo', stdout=StringIO())
+
+        producto = Menu.objects.get(nombre_producto='Cupcake red velvet')
+        self.assertEqual(producto.imagen.name, 'productos/nueva.jpg')
 
 
 class DescuentoVIPTests(TestCase):
