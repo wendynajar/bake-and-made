@@ -41,6 +41,8 @@ python manage.py test               # tests de tienda y usuarios
 - `bakeandmade/tienda/peticion.py`: `plan_de_peticion()` y `descuento_de_peticion()` calculan plan y descuento **una vez por petición**; vistas y context processors deben usarlas en vez de llamar a `plan_de()` directo.
 - Plantillas: las páginas no heredan de `base.html` (cada una repite su encabezado). Lo común va en fragmentos incluidos en todas: `tienda/_vip_nav.html` (pestaña "VIP", entre el carrito y el saludo) e `iot/_kiosco.html` (polling y barra del kiosco, antes de `</body>`). Contexto VIP y de kiosco en `usuarios.context_processors.vip`.
 - `bakeandmade/tienda/views.py`: vistas delgadas (HTTP → modelos → plantilla/redirect).
+- `bakeandmade/tienda/forms.py`: `DireccionEntregaForm` (dirección del checkout por campos; `.como_texto()` la une en `Pedido.direccion_entrega`, sin migración). Se dibuja con `tienda/_campo_direccion.html`.
+- `cargar_catalogo`: crea lo que falte sin modificar lo existente; la única excepción es completar la imagen (`IMAGENES`) de un producto que no tenga. Las imágenes deben estar en `media/productos/` (S3 en Render).
 
 - `firmware/esp32-vip/`: lector RFID (PlatformIO, ESP32 + RC522). Credenciales en `include/secrets.h` (en `.gitignore`; plantilla `secrets.example.h`). Pines, LEDs y lectura de UID en su `README.md`. Se carga con `cargar.ps1` (Windows; PlatformIO se cuelga compilando sobre `\\wsl.localhost\...`, así que compila en una copia en `%LOCALAPPDATA%`) o `cargar.sh` (WSL, con `usbipd-win`). No es parte del despliegue en Render.
 

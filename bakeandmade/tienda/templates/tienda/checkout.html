@@ -122,24 +122,28 @@
                         </div>
                     </div>
 
-                    <div class="checkout-field">
-                        <label for="direccion_entrega">
-                            Dirección de entrega <span>*</span>
-                        </label>
+                    <fieldset class="checkout-direccion">
+                        <legend>Dirección de entrega</legend>
 
-                        <textarea
-                            id="direccion_entrega"
-                            name="direccion_entrega"
-                            rows="5"
-                            maxlength="1000"
-                            required
-                            placeholder="Calle, número exterior e interior, colonia, código postal, ciudad, estado y referencias de entrega."></textarea>
+                        {% include 'tienda/_campo_direccion.html' with campo=form_direccion.calle autocompletar='address-line1' %}
 
-                        <small>
-                            Incluye referencias que nos ayuden
-                            a identificar correctamente tu domicilio.
-                        </small>
-                    </div>
+                        <div class="checkout-fila">
+                            {% include 'tienda/_campo_direccion.html' with campo=form_direccion.numero_exterior autocompletar='off' %}
+                            {% include 'tienda/_campo_direccion.html' with campo=form_direccion.numero_interior autocompletar='address-line2' %}
+                        </div>
+
+                        <div class="checkout-fila">
+                            {% include 'tienda/_campo_direccion.html' with campo=form_direccion.colonia autocompletar='address-level3' %}
+                            {% include 'tienda/_campo_direccion.html' with campo=form_direccion.codigo_postal autocompletar='postal-code' numerico=True patron='[0-9]{5}' %}
+                        </div>
+
+                        <div class="checkout-fila">
+                            {% include 'tienda/_campo_direccion.html' with campo=form_direccion.ciudad autocompletar='address-level2' %}
+                            {% include 'tienda/_campo_direccion.html' with campo=form_direccion.estado autocompletar='address-level1' %}
+                        </div>
+
+                        {% include 'tienda/_campo_direccion.html' with campo=form_direccion.referencias %}
+                    </fieldset>
 
                     <div class="checkout-info">
                         ✦ Tu pedido se registrará como pendiente

@@ -1,0 +1,32 @@
+{% comment %}
+Un campo de DireccionEntregaForm con su etiqueta y sus errores.
+Parámetros: campo (BoundField), autocompletar (valor de autocomplete) y,
+opcionales, numerico (teclado numérico en el celular) y patron (pattern HTML).
+{% endcomment %}
+<div class="checkout-field{% if campo.errors %} checkout-field-error{% endif %}">
+    <label for="{{ campo.id_for_label }}">
+        {{ campo.label }}{% if campo.field.required %} <span>*</span>{% endif %}
+    </label>
+    {% if campo.name == 'referencias' %}
+        <textarea id="{{ campo.id_for_label }}"
+                  name="{{ campo.html_name }}"
+                  rows="3"
+                  maxlength="{{ campo.field.max_length }}"
+                  autocomplete="off"
+                  placeholder="Entre qué calles, color de fachada, cómo identificar tu domicilio...">{{ campo.value|default_if_none:'' }}</textarea>
+    {% else %}
+        <input type="text"
+               id="{{ campo.id_for_label }}"
+               name="{{ campo.html_name }}"
+               value="{{ campo.value|default_if_none:'' }}"
+               maxlength="{{ campo.field.max_length }}"
+               autocomplete="{{ autocompletar }}"
+               {% if numerico %}inputmode="numeric"{% endif %}
+               {% if patron %}pattern="{{ patron }}"{% endif %}
+               {% if campo.field.required %}required{% endif %}
+               {% if campo.errors %}aria-invalid="true"{% endif %}>
+    {% endif %}
+    {% for error in campo.errors %}
+        <small class="checkout-error" role="alert">{{ error }}</small>
+    {% endfor %}
+</div>
