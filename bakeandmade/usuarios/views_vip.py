@@ -21,7 +21,6 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from iot.models import TarjetaRFID
 from tienda.models import (
     PLAN_SWEET,
     ExperienciaQR,
@@ -45,7 +44,7 @@ COLOR_QR = '#582639'
 
 @login_required
 def pagina_vip(request: HttpRequest) -> HttpResponse:
-    """Membresía VIP: vigencia, descuento de hoy, tarjeta, cumpleaños, calendario y video."""
+    """Membresía VIP: vigencia, descuento de hoy, cumpleaños, calendario y video."""
     if plan_de_peticion(request) != PLAN_SWEET:
         return redirect('suscripcion')
 
@@ -59,7 +58,6 @@ def pagina_vip(request: HttpRequest) -> HttpResponse:
     return render(request, 'usuarios/vip.html', {
         'perfil': perfil,
         'suscripcion': Suscripcion.objects.vigente_para(request.user),
-        'tarjeta': TarjetaRFID.objects.filter(usuario=request.user).first(),
         'experiencia': experiencia,
         'url_qr': url_qr,
         'qr_svg': _qr_svg(url_qr) if url_qr else '',

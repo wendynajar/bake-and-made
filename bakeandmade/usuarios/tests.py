@@ -412,15 +412,11 @@ class PaginaVIPTests(VIPMixin, TestCase):
 
         respuesta = self.client.get(reverse('vip'))
 
-        self.assertContains(respuesta, 'VIP — <em>Ana</em>', html=False)
-        self.assertContains(respuesta, 'termina en …D4')
+        self.assertContains(respuesta, '<h1>Ana</h1>', html=False)
+        self.assertNotContains(respuesta, 'Tarjeta VIP')
         self.assertContains(respuesta, '20 %')
         self.assertContains(respuesta, 'Tu video estará listo pronto.')
         self.assertContains(respuesta, 'id="form-cumple"')
-
-    def test_sin_tarjeta_esta_en_camino(self) -> None:
-        self.client.force_login(self.bruno)
-        self.assertContains(self.client.get(reverse('vip')), 'En camino')
 
     def test_cumpleanios_registrado_ya_no_es_editable(self) -> None:
         PerfilVIP.objects.create(usuario=self.ana, fecha_nacimiento=datetime.date(1995, 3, 14),
