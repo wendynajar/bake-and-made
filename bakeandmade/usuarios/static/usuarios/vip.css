@@ -219,7 +219,7 @@
     font-size: 14px;
 }
 
-/* Video: QR y textos centrados en la tarjeta (el título sigue alineado como en las demás). */
+/* Video: título, QR y textos centrados en la tarjeta. */
 .vip-card-video {
     display: flex;
     flex-direction: column;
@@ -229,7 +229,7 @@
 
 .vip-card-video h2 {
     align-self: stretch;
-    text-align: left;
+    text-align: center;
 }
 
 .vip-qr {
