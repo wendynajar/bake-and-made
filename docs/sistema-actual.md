@@ -1,224 +1,204 @@
-# Análisis del estado actual — Bake & Made
+# El sistema hoy: Bake & Made
 
-> Fecha del análisis: 2026-11-18 · Rama: `feat/render-allocation` · Último commit analizado: `03bea44` ("Preparar despliegue en Render y aplicar reglas de ARCHITECTURE.md")
+> Actualizado el 2026-11-23 sobre `feat/ajustes-ui` (commit `7096078`). Producción (`feat/render-allocation`) todavía no tiene los cambios de las ramas `feat/direccion-entrega` y `feat/ajustes-ui` (ver [historial-de-cambios.md](historial-de-cambios.md#5-ajustes-posteriores)).
+
+Este documento describe **cómo funciona el sistema ahora**. Cómo lo recibimos y qué cambió en cada etapa está en [historial-de-cambios.md](historial-de-cambios.md). Las reglas de código están en [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## 1. Resumen
 
-Bake & Made es una tienda en línea de repostería (cupcakes, pasteles, galletas) hecha con **Django 6.1.1** y plantillas renderizadas en el servidor. **Está desplegada en Render** (Web Service con gunicorn y PostgreSQL administrado). El código está dividido en dos apps:
+Bake & Made es una tienda en línea de repostería hecha como un **monolito Django** con plantillas que se renderizan en el servidor, desplegado en Render con PostgreSQL y S3. Tiene tres apps:
 
-- `tienda`: catálogo con stock, carrito en la sesión, checkout con control de inventario e idempotencia, un asistente de 4 pasos para armar cupcakes personalizados y la suscripción mensual "Sweet Plan" (con pago simulado).
-- `usuarios`: registro, inicio y cierre de sesión con el `User` nativo de Django.
-
-Ya se aplicaron las reglas de [ARCHITECTURE.md](ARCHITECTURE.md): configuración por variables de entorno, la lógica de negocio en modelos y QuerySets (fat models, skinny views), type hints y docstrings. Hay **18 tests y todos pasan**.
-
-Lo que falta de la visión de ARCHITECTURE.md:
-- toda la capa IoT: la app `iot`, el endpoint `/api/rfid/scan/`, el polling en JS y el ESP32;
-- una pasarela de pago real;
-- llevar los cupcakes personalizados hasta el checkout.
-
-### Fases de ARCHITECTURE.md
-
-| Fase | Estado |
+| App | Responsabilidad |
 |---|---|
-| 1. Planteamiento | Modelos hechos. **Pendientes:** el contrato de la API RFID, el mapeo de pines del ESP32 y el registro de UIDs VIP |
-| 2. Construcción | Backend web y S3 hechos (S3 se activa por variable de entorno). **Pendientes:** la app `iot`, el polling en el frontend y el firmware del ESP32 |
-| 3. Pruebas | Hay tests unitarios del checkout, las suscripciones, los ingredientes y el registro. **Pendientes:** pruebas de integración del endpoint RFID y pruebas de hardware |
-| 4. Despliegue | Funciona en Render. **Pendientes:** CI/CD con GitHub Actions y la prueba de humo con RFID |
+| `tienda` | Catálogo, carrito en la sesión, asistente de cupcakes personalizados, checkout (productos y personalizados, con descuento VIP), Sweet Plan y reglas de descuento |
+| `usuarios` | Registro, login y logout con el `User` nativo, `PerfilVIP` (teléfono y cumpleaños) y la página `/vip/` (cumpleaños, calendario y video QR) |
+| `iot` | Tarjetas RFID, terminales de kiosco, API del lector ESP32 y sesión iniciada con tarjeta |
+
+Además, `firmware/esp32-vip/` tiene el programa del lector (ESP32 + RC522), que se carga aparte y no forma parte del despliegue.
+
+**Estado:** las fases 0 a 10 de la capa VIP están terminadas y la 11 (prueba de humo en Render) está casi completa. Hay **157 tests y todos pasan** (verificado el 2026-11-23).
 
 ## 2. Herramientas y dependencias
 
-| Elemento | Valor | Fuente |
-|---|---|---|
-| Lenguaje | Python 3.13 (Render: `PYTHON_VERSION=3.13.5`) | `Pipfile`, `render.yaml` |
-| Framework | Django 6.1.1 | `requirements.txt` / `Pipfile` |
-| Servidor WSGI | gunicorn ≥ 23 | `requirements.txt` |
-| Estáticos | WhiteNoise ≥ 6.8 (`STATIC_ROOT = staticfiles/`) | `settings.py` |
-| Base de datos | PostgreSQL en Render (`dj-database-url` + `psycopg[binary]`). En local es SQLite si `DATABASE_URL` está vacía | `settings.py` |
-| Imágenes subidas | `django-storages[s3]` si `AWS_STORAGE_BUCKET_NAME` está definida. Si no, el disco local, que es efímero en Render | `settings.py` |
-| Configuración | `python-dotenv` (lee `.env` en la raíz del repo) | `settings.py`, `.env.example` |
-| Imágenes (`ImageField`) | Pillow ≥ 11 | `requirements.txt` |
-| Gestor de dependencias | `requirements.txt` (lo usa Render) y Pipenv (desarrollo). Hoy están sincronizados | raíz del repo |
-| Frontend | Plantillas Django, CSS propio, `premium.js` (vanilla) y Google Fonts | `tienda/static`, `base.html` |
-| Correo | Backend de consola (`MAILERS`). **No envía correos reales** | `settings.py` |
-| Idioma / zona horaria | `es-mx` / `America/Mexico_City` | `settings.py` |
-| Tests | `unittest` de Django: 16 en `tienda` y 2 en `usuarios` | `*/tests.py` |
-| CI/CD | Render hace el deploy desde GitHub. **No hay CI** que ejecute los tests | — |
+| Elemento | Valor |
+|---|---|
+| Lenguaje | Python 3.13 (Render: `PYTHON_VERSION=3.13.5`) |
+| Framework | Django 6.1.1 |
+| Servidor WSGI | gunicorn ≥ 23 (`WEB_CONCURRENCY=2`) |
+| Base de datos | PostgreSQL en Render (`dj-database-url` + `psycopg[binary]`). En local, SQLite si `DATABASE_URL` está vacía |
+| Estáticos | WhiteNoise (`STATIC_ROOT = staticfiles/`) |
+| Archivos subidos | `django-storages[s3]` si `AWS_STORAGE_BUCKET_NAME` tiene valor (URLs firmadas de 1 h). Si no, `bakeandmade/media/` |
+| Código QR | `segno` (genera el SVG en el servidor) |
+| Calendario | FullCalendar 6.1.15 por CDN |
+| Imágenes (`ImageField`) | Pillow ≥ 11 |
+| Configuración | `python-dotenv`: todo se lee de variables de entorno (plantilla en `.env.example`) |
+| Frontend | Plantillas Django, CSS propio y JS vanilla (`premium.js`, `vip.js`, `polling.js`) |
+| Firmware | PlatformIO, `espressif32@6.9.0`, `MFRC522@1.4.11` |
+| Idioma y zona horaria | `es-mx` y `America/Mexico_City` |
+| Dependencias | `requirements.txt` (lo usa Render) y `Pipfile` (desarrollo). **`Pipfile.lock` está desactualizado** (pendiente #21) |
 
 ## 3. Estructura del repositorio
 
 ```
-bake-and-made/                    ← raíz del repo git
-├── CLAUDE.md                     ← guía rápida para agentes
-├── Pipfile / Pipfile.lock        ← dependencias de desarrollo
-├── requirements.txt              ← dependencias que instala Render
-├── build.sh                      ← Build Command de Render
-├── render.yaml                   ← Blueprint: Web Service + PostgreSQL
-├── .env.example                  ← plantilla de variables de entorno
-├── .gitattributes                ← obliga a LF en *.sh
-├── docs/                         ← ARCHITECTURE, este análisis y la guía de despliegue
-└── bakeandmade/                  ← proyecto Django (aquí está manage.py)
-    ├── manage.py
-    ├── bakeandmade/
-    │   ├── settings.py           ← todo se lee de variables de entorno
-    │   ├── urls.py               ← admin + include(usuarios.urls) + include(tienda.urls)
-    │   └── wsgi.py / asgi.py
-    ├── usuarios/                 ← autenticación (sin modelos propios)
-    │   ├── forms.py              ← RegistroUsuarioForm (email único)
-    │   ├── views.py              ← registro
-    │   ├── urls.py               ← registro, login y logout
-    │   ├── templates/usuarios/   ← login.html, registro.html
-    │   └── tests.py
-    └── tienda/
-        ├── models.py             ← modelos, QuerySets y reglas de negocio (~550 líneas)
-        ├── views.py              ← vistas delgadas (~570 líneas)
-        ├── carrito.py            ← claves y lectura del carrito en la sesión
-        ├── context_processors.py ← contador del carrito y plan del usuario
-        ├── urls.py
-        ├── admin.py
-        ├── templatetags/wizard_filters.py  ← filtro dict_get
-        ├── management/commands/cargar_catalogo.py  ← datos iniciales (idempotente)
-        ├── migrations/ 0001–0005
-        ├── templates/tienda/     ← 9 plantillas
-        ├── static/tienda/        ← 5 CSS y premium.js
-        └── tests.py
+bake-and-made/
+├── README.md, CLAUDE.md
+├── docs/                         ← esta documentación
+├── requirements.txt, Pipfile     ← dependencias (mantenerlas sincronizadas)
+├── build.sh, render.yaml         ← build y Blueprint de Render
+├── .env.example, .gitattributes  ← variables de entorno; LF obligatorio en *.sh
+├── firmware/esp32-vip/           ← lector RFID: src/main.cpp, cargar.ps1, cargar.sh, README
+└── bakeandmade/                  ← proyecto Django (manage.py)
+    ├── bakeandmade/              ← settings.py, urls.py (admin, /healthz e include de cada app)
+    ├── tienda/
+    │   ├── models.py             ← modelos, QuerySets y reglas de negocio
+    │   ├── views.py              ← vistas delgadas
+    │   ├── forms.py              ← DireccionEntregaForm
+    │   ├── carrito.py            ← claves y lectura del carrito en la sesión
+    │   ├── peticion.py           ← plan y descuento calculados una vez por petición
+    │   ├── context_processors.py ← contador del carrito y plan
+    │   ├── management/commands/cargar_catalogo.py
+    │   ├── migrations/ 0001–0008
+    │   ├── templates/tienda/     ← páginas + fragmentos _encabezado, _vip_nav, _campo_direccion
+    │   └── static/tienda/        ← CSS y premium.js
+    ├── usuarios/
+    │   ├── models.py             ← PerfilVIP
+    │   ├── views.py, views_vip.py← autenticación y página /vip/ con sus APIs
+    │   ├── context_processors.py ← contexto VIP y de kiosco
+    │   ├── management/commands/crear_usuarios_demo.py
+    │   └── templates/usuarios/   ← login, registro, vip
+    └── iot/
+        ├── models.py             ← TarjetaRFID, Terminal, LecturaRFID
+        ├── views.py              ← API del lector, estado, salir y kiosco
+        ├── sesion.py             ← sincronizar(): inicia o cierra la sesión del kiosco
+        ├── middleware.py         ← ActividadKioscoMiddleware
+        ├── management/commands/  ← crear_terminal, registrar_tarjeta, simular_scan
+        └── templates/iot/_kiosco.html, static/iot/polling.js
 ```
-
-Ya no están los archivos sueltos de antes (`catalogo.json`, `catalogo_respaldo.json`, `convertir.py` y `usuarios.json`).
 
 ## 4. Arquitectura
 
-Es un **monolito Django (MVT)** en Render:
-
 ```
-Navegador ──HTTPS──▶ Render ──▶ gunicorn (WEB_CONCURRENCY procesos) ──▶ Django
-                                                                    │
-     urls.py → usuarios.urls / tienda.urls → views (delgadas) → models / QuerySets
-                                                                    │
-       ├── Sesión (django_session en BD): carrito, carrito_personalizados,
-       │   pasos del asistente, checkout_token, checkout_total
-       ├── ORM ──▶ PostgreSQL (Render) / SQLite (local)
-       ├── /static ──▶ WhiteNoise (desde el mismo proceso)
-       └── /media  ──▶ S3 (si hay bucket) / disco local efímero
+Navegador / kiosco ──HTTPS──▶ Render ──▶ gunicorn ──▶ Django
+ESP32 ──POST /api/rfid/scan/──┘                         │
+          urls.py → usuarios.urls / iot.urls / tienda.urls → vistas delgadas → modelos y QuerySets
+                                                         │
+     ├── Sesión (en la BD): carrito, carrito_personalizados, pasos del asistente,
+     │   checkout_token, terminal del kiosco
+     ├── ORM ──▶ PostgreSQL (Render) / SQLite (local)
+     ├── /static ──▶ WhiteNoise
+     └── /media  ──▶ S3 (imágenes del catálogo y videos del QR)
 ```
 
-- **Build en Render (`build.sh`):** `pip install`, `collectstatic`, `migrate`, `cargar_catalogo` y, si se definen las variables `DJANGO_SUPERUSER_*`, la creación del superusuario.
-- **Carrito:** vive solo en la sesión. No hay modelo `Carrito`. `tienda/carrito.py` define `CLAVE_CARRITO` y `CLAVE_PERSONALIZADOS`.
-- **Autenticación:** `LoginView` y `LogoutView`. El logout es por POST.
-- **Lógica de negocio** (en `tienda/models.py`):
-  - `Suscripcion.objects.plan_de()`, `.vigente_para()`, `.activa_para()` y `.expirar_vencidas()`; `Suscripcion.contratar_mes()` y `.cancelar()`; `sumar_un_mes()`.
-  - `Ingrediente.objects.de_categoria().visibles_para(usuario)`: los ingredientes `solo_suscriptores` solo los ve quien tiene el Sweet Plan.
-  - `Menu.objects.en_venta()` y `Menu.admite_cantidad()`.
-  - `Pedido.objects.lineas_validas()`, `.total_de()` y `.crear_desde_carrito()`. Este último es atómico, descuenta stock con `F()` y usa un token único. Lanza `StockInsuficiente` o `PrecioCambiado`, que heredan de `ErrorPedido`.
-  - `CupcakePersonalizado.PASOS`, `.calcular_precio()` ($35 + extras), `.esta_completo()`, `.filtrar_dietas()`, `.DIETAS` y `.COLORES_FROSTING`.
+Decisiones que conviene conocer antes de tocar el código:
 
-### Modelo de datos
+- **Fat models, skinny views.** Toda regla de negocio vive en `models.py` (métodos y QuerySets). Las vistas solo leen la petición, llaman al modelo y responden.
+- **Una sola fuente del descuento.** `PerfilVIP.descuento_vigente()` decide el porcentaje: 0 %, 20 % con el Sweet vigente o 50 % en su cumpleaños, salvo que haya registrado la fecha ese mismo día. `descuento_para()` y `aplicar_descuento()` en `tienda/models.py` lo aplican con `Decimal` y redondeo por línea. `tienda/peticion.py` lo calcula una vez por petición.
+- **El checkout no confía en la sesión.** `Pedido.objects.lineas_validas()` y `.personalizados_validos()` vuelven a leer precio, stock, `activo` y exclusividad de la base. `crear_desde_carrito()` es atómico, descuenta stock con `F()` y usa un token único para que un doble envío no duplique el pedido.
+- **Polling en lugar de WebSockets.** El kiosco consulta `/api/iot/estado/` cada 2 s (`IOT_POLL_SEGUNDOS`). El ESP32 nunca habla con el navegador.
+- **Sesión del kiosco.** Cualquier inicio o cierre de sesión en un kiosco pasa por `iot.sesion.sincronizar()`, que conserva el carrito y la vinculación de la terminal. `Terminal.version` evita que un rechazo viejo cierre la sesión de quien entró después.
+- **Las páginas no heredan de `base.html`.** Lo común va en fragmentos que se incluyen en todas: `tienda/_encabezado.html` (anuncio y barra, que incluye `_vip_nav.html`) e `iot/_kiosco.html` (polling y barra del kiosco). Login y registro no usan el encabezado.
+- **Imágenes con respaldo.** Toda `<img>` de producto lleva un `<template>` con el logo y un `onerror` que lo muestra si el archivo no existe (por ejemplo, si aún no se sube a S3).
+- **Nombres de URL sin namespace**, porque las plantillas usan `{% url 'inicio' %}`.
 
-| Módulo | Modelos | ¿Se usa fuera del admin? |
+### Configuración de negocio (`settings.py`)
+
+| Ajuste | Valor | Qué controla |
 |---|---|---|
-| Catálogo | `CategoriaProducto`, `Menu`, `DetallesMenu` | `Menu` y `CategoriaProducto` sí. `DetallesMenu` solo en el admin |
-| Ingredientes | `CategoriaIngrediente`, `Ingrediente` | Sí (en el asistente de personalización) |
-| Pedidos | `Pedido`, `DetallePedido` | Sí (en el checkout) |
-| Personalización | `CupcakePersonalizado`, `CupcakeIngredientes` | La clase se usa para pasos y precios, pero **no se guardan filas**: los personalizados solo viven en la sesión |
-| Suscripciones | `Suscripcion` | Sí |
-| Futuro | `RecordatorioEvento`, `ExperienciaQR` | **No**, solo en el admin |
+| `VIP_DESCUENTO` | `0.20` | Descuento del Sweet Plan vigente |
+| `VIP_DESCUENTO_CUMPLE` | `0.50` | Descuento el día del cumpleaños |
+| `VIP_EXPIRA_MINUTOS` | `5` | Inactividad que cierra la sesión abierta con tarjeta |
+| `IOT_POLL_SEGUNDOS` | `2` | Frecuencia del polling del kiosco |
+| `IOT_DEVICE_TOKEN` | variable de entorno | Token que el ESP32 manda en `Authorization: Token …` |
 
-## 5. Funcionalidad actual (rutas)
+## 5. Modelo de datos
 
-| Ruta | App / vista | Qué hace |
+| App | Modelo | Para qué se usa |
 |---|---|---|
-| `/` | `tienda.inicio` | Catálogo: productos `en_venta()` (disponibles y con stock) |
-| `/registro/` | `usuarios.registro` | Registro con email único. Inicia sesión automáticamente |
-| `/login/`, `/logout/` | `LoginView` / `LogoutView` | Autenticación |
-| `/carrito/` | `ver_carrito` | Muestra productos normales y personalizados |
-| `/carrito/agregar/<id>/` | `agregar_carrito` | Suma 1 unidad sin pasar del stock |
-| `/carrito/actualizar/<id>/` | `actualizar_carrito` | Aumentar, disminuir o eliminar |
-| `/carrito/personalizado/<i>/actualizar/` y `/eliminar/` | — | Gestiona los cupcakes personalizados de la sesión |
-| `/checkout/` | `checkout` | Exige login. Token UUID (idempotencia), revisa precio y stock y crea el pedido con `crear_desde_carrito()`. **Solo procesa el carrito normal** |
-| `/pedido-confirmado/<id>/` | `pedido_confirmado` | Confirmación. Solo la ve el dueño del pedido |
-| `/personalizar/`, `/personalizar/<paso>/` | `personalizar_cupcake` | Asistente: base → relleno → cobertura (con color) → topping → resumen. Incluye filtro de dietas y no deja saltarse pasos |
-| `/personalizar/agregar/` | `agregar_cupcake_personalizado` | Recalcula el precio en el servidor y lo agrega a `carrito_personalizados` |
-| `/suscripcion/` (+ `confirmar/`, `cancelar/`) | — | Sweet Plan a $99 al mes con pago **simulado**. Al cancelar se conserva el acceso hasta `fecha_fin` |
-| `/admin/` | Django admin | Catálogo, stock, ingredientes, pedidos y suscripciones |
+| `tienda` | `CategoriaProducto`, `Menu` | Catálogo con stock e imagen |
+| `tienda` | `DetallesMenu` | Solo en el admin |
+| `tienda` | `CategoriaIngrediente`, `Ingrediente` | Asistente de personalización. `solo_suscriptores` marca los exclusivos del Sweet, `activo` oculta uno y `stock_disponible` baja en cada venta |
+| `tienda` | `CupcakePersonalizado`, `CupcakeIngredientes` | Se guardan al comprar, con `dietas` y `color_frosting` para la cocina. `precio_calculado` es el precio base, sin descuento |
+| `tienda` | `Pedido`, `DetallePedido` | Pedido con `direccion_entrega` (texto armado desde el formulario), `descuento_porcentaje` y `motivo_descuento`. `DetallePedido.precio_unitario` ya trae el descuento |
+| `tienda` | `Suscripcion` | Sweet Plan mensual. `contratar_mes()` también entrega una tarjeta RFID |
+| `tienda` | `RecordatorioEvento` | Fechas del calendario VIP. Cumpleaños y aniversarios se repiten cada año. `notificado` aún no se usa porque no hay envío de correos |
+| `tienda` | `ExperienciaQR` | Video del usuario en S3 con `codigo_unico` y `fecha_expiracion` |
+| `usuarios` | `PerfilVIP` | Teléfono, `fecha_nacimiento` y `cumple_registrado_en`. El cumpleaños se registra una sola vez y después solo el admin lo cambia |
+| `iot` | `TarjetaRFID` | Inventario de tarjetas. El UID se normaliza (mayúsculas, sin separadores). `usuario` queda vacío mientras esté libre |
+| `iot` | `Terminal` | Un kiosco (p. ej. `caja-1`): tarjeta activa, último rechazo, última actividad y `version` |
+| `iot` | `LecturaRFID` | Bitácora de cada lectura y su resultado |
 
-Datos iniciales: `python manage.py cargar_catalogo` crea 13 productos, 5 categorías, 4 categorías de ingredientes y 15 ingredientes. Se puede ejecutar varias veces sin duplicar nada (`get_or_create`), y Render lo ejecuta en cada build.
+Hay diagramas de los ingredientes y del flujo del descuento en [diagramas.md](diagramas.md).
 
-### Cobertura de tests (18, todos OK)
+## 6. Rutas
 
-| Clase | Qué prueba |
+| Ruta | Quién la usa | Qué hace |
+|---|---|---|
+| `/` | Todos | Catálogo (`Menu.objects.en_venta()`), con el precio VIP si aplica |
+| `/registro/`, `/login/`, `/logout/` | Todos | Autenticación. El logout es por POST y, en un kiosco, conserva la vinculación |
+| `/carrito/` (+ `agregar/`, `actualizar/`, `personalizado/<i>/…`) | Todos | Carrito de productos y personalizados, con el renglón de descuento VIP |
+| `/personalizar/`, `/personalizar/<paso>/`, `/personalizar/agregar/` | Todos | Asistente base → relleno → cobertura → topping → resumen. El precio se recalcula en el servidor |
+| `/checkout/` | Con sesión | Dirección por campos (`DireccionEntregaForm`), validación en el servidor y pedido con descuento |
+| `/pedido-confirmado/<id>/` | Dueño del pedido | Confirmación con el desglose del descuento |
+| `/suscripcion/` (+ `confirmar/`, `cancelar/`) | Con sesión | Sweet Plan con pago simulado. Al cancelar se conserva el acceso hasta `fecha_fin` |
+| `/vip/` | Sweet vigente | Resumen de la membresía, tarjeta de cumpleaños (día, mes y días que faltan), QR del video y calendario |
+| `/api/vip/fechas/` (GET, POST), `/api/vip/fechas/<id>/` (DELETE) | Sweet vigente | Fechas del calendario. Cada usuario solo ve las suyas |
+| `/api/vip/cumpleanios/` (POST) | Sweet vigente | Registro único del cumpleaños (409 si ya existe, 400 si la fecha es inválida) |
+| `/vip/v/<codigo>/` | Pública (el QR) | Redirige (302) a la URL firmada del video en S3, o 404 si expiró |
+| `/api/rfid/scan/` (POST) | ESP32 | Con token: 200 ok, 403 sin Sweet, 404 tarjeta desconocida, 401 token malo y 400 terminal desconocida |
+| `/api/iot/estado/` (GET) | Kiosco, cada 2 s | Aplica la expiración por inactividad y sincroniza la sesión con la terminal |
+| `/api/iot/salir/` (POST) | Botón "Salir" del kiosco | Cierra en el acto la sesión abierta con tarjeta |
+| `/kiosco/<codigo>/` | Staff | Vincula este navegador con la terminal y cierra la sesión del staff |
+| `/healthz` | Render y ESP32 | Responde `ok` sin tocar la base de datos |
+| `/admin/` | Admin | Catálogo, pedidos, suscripciones, tarjetas, terminales, perfiles VIP y videos |
+
+## 7. Comandos de gestión
+
+| Comando | App | Qué hace |
+|---|---|---|
+| `cargar_catalogo` | `tienda` | Crea las categorías, productos e ingredientes que falten sin modificar los existentes. La única excepción: completa la imagen (`IMAGENES`, en `media/productos/`) de un producto que no tenga. Render lo corre en cada build |
+| `crear_terminal <codigo>` | `iot` | Crea una terminal de kiosco (`build.sh` crea `caja-1`) |
+| `registrar_tarjeta <uid>` | `iot` | Agrega una tarjeta libre al inventario |
+| `simular_scan <uid> --terminal caja-1` | `iot` | Simula una lectura del ESP32, para probar sin hardware |
+| `crear_usuarios_demo` | `usuarios` | Crea a Ana, Bruno y Carla con Sweet vigente y tarjeta. Requiere `DEMO_PASSWORD` y `--uids` o `DEMO_VIP_UIDS` |
+
+## 8. Tests
+
+157 tests con `unittest` de Django (`python manage.py test`), todos en verde:
+
+| App | Clases |
 |---|---|
-| `SumarUnMesTests` | Mes normal, fin de mes corto y cambio de año |
-| `SuscripcionTests` | Plan Basic por defecto, contratar, cancelada con acceso vigente y expiración |
-| `IngredientesVisiblesTests` | Los exclusivos se ocultan a Basic y se muestran a Sweet |
-| `PrecioCupcakeTests` | Precio base más extras |
-| `PedidoTests` | Crea el pedido y descuenta stock; rechaza si no hay stock o si cambió el precio |
-| `CheckoutVistaTests` | El pedido se registra y vacía el carrito; un token reutilizado no duplica el pedido |
-| `PaginasPublicasTests` | Inicio, carrito y suscripción responden |
-| `RegistroTests` (`usuarios`) | El registro inicia sesión; rechaza un correo duplicado |
+| `tienda` (75) | `SumarUnMesTests`, `SuscripcionTests`, `IngredientesVisiblesTests`, `PrecioCupcakeTests`, `PedidoTests`, `CheckoutVistaTests`, `DireccionEntregaFormTests`, `DireccionCheckoutVistaTests`, `CheckoutPersonalizadosTests`, `CheckoutVIPTests`, `PaginasPublicasTests`, `CamposVIPTests`, `IngredientesExclusivosTests`, `ImagenesCatalogoTests`, `EncabezadoComunTests`, `ImagenFaltanteTests`, `DescuentoVIPTests`, `AplicarDescuentoTests`, `TiendaVIPTests`, `KioscoPlantillaTests`, `EntregaTarjetaMensajeTests` |
+| `usuarios` (41) | `RegistroTests`, `PerfilVIPTests`, `UsuariosDemoTests`, `CumpleaniosTests`, `DiasParaCumpleaniosTests`, `FechasVIPTests`, `CumpleaniosAPITests`, `VideoQRTests`, `PaginaVIPTests` |
+| `iot` (41) | `NormalizarUidTests`, `TarjetasLibresTests`, `ComandosIotTests`, `EntregaTarjetaTests`, `ScanAPITests`, `LoginTarjetaTests`, `KioscoTests`, `HealthzTests`, `SimularScanTests` |
 
-## 6. Hallazgos
+No hay CI: los tests se corren a mano antes de fusionar a `feat/render-allocation`.
 
-### Resueltos (desde el análisis del 2026-11-17)
+## 9. Pendientes
 
-| # | Hallazgo | Cómo se resolvió |
-|---|---|---|
-| 1 | `SECRET_KEY` escrito en el código | Ahora se lee de una variable de entorno. Render la genera. ⚠️ La clave vieja **sigue en el historial de git**: no debe reutilizarse |
-| 2 | `DEBUG` y `ALLOWED_HOSTS` fijos | Se leen de variables de entorno, y `RENDER_EXTERNAL_HOSTNAME` se agrega sola |
-| 3 | No existía `STATIC_ROOT` ni WhiteNoise | `STATIC_ROOT = staticfiles/` y WhiteNoise |
-| 4 | `/media` no persistía | Se usa S3 con django-storages **si se define** `AWS_STORAGE_BUCKET_NAME` |
-| 5 | SQLite en producción | PostgreSQL vía `DATABASE_URL` |
-| 6 | Faltaban `requirements.txt` y gunicorn | Se agregaron, junto con `build.sh` y `render.yaml` |
-| 10 | Código muerto e imports duplicados en `views.py` | Eliminados |
-| 12 | Archivos JSON y scripts sueltos | Borrados |
-| 13 | No había tests | 18 tests, todos OK (verificado el 2026-11-18) |
-| 14 | Todas las rutas en el `urls.py` del proyecto | `tienda/urls.py` y `usuarios/urls.py` con `include()` |
+Los números son los del análisis original, para poder rastrearlos en [historial-de-cambios.md](historial-de-cambios.md).
 
-### Pendientes
-
-**Bugs funcionales**
-> **#7 y #8 resueltos en la fase 6 de la capa VIP** (checkout de personalizados con validación de ingredientes en el servidor y descuento de su stock). Se conserva la descripción original:
-
-7. **El checkout ignora los cupcakes personalizados.** `checkout()` solo lee `obtener_carrito()` (`views.py:247`):
-   - si el carrito solo tiene personalizados, responde "Tu carrito está vacío";
-   - si tiene ambos tipos, el total del carrito no coincide con el del checkout, y los personalizados se quedan en la sesión después de comprar;
-   - nunca se escriben `CupcakePersonalizado`, `CupcakeIngredientes` ni `DetallePedido.cupcake_custom`.
-8. Al vender un personalizado no se descuenta `Ingrediente.stock_disponible`.
-9. ~~`cargar_catalogo` crea todos los ingredientes con `solo_suscriptores=False`.~~ **Resuelto en la fase 2 de la capa VIP:** Red velvet, Dulce de leche, Queso crema y Fresas son exclusivos del Sweet Plan (en `cargar_catalogo` y con la migración `tienda.0007` para bases existentes).
+**Por terminar de la capa VIP (prueba de humo, fase 11).** Faltan tres pruebas manuales en Render:
+- checkout con 20 % que incluya un cupcake personalizado;
+- cumpleaños de Carla con 50 % y felicitación;
+- Sweet vencido de Bruno, que debe mostrar "Renueva tu Sweet Plan".
 
 **Producción y configuración**
-15. `check --deploy` falla con **`mail.E001`**: `MAILERS` usa el backend de consola. No afecta mientras nada envíe correos, pero `RecordatorioEvento` va a necesitar SMTP o un proveedor configurado por variables de entorno.
-16. `SECURE_HSTS_SECONDS` vale `0` por defecto (aviso `security.W004`). Hay que subirlo cuando se confirme HTTPS estable.
-17. `render.yaml` usa `plan: free` en PostgreSQL. La base gratuita de Render **expira a los 30 días**.
-18. **Rama de despliegue.** Render despliega `feat/render-allocation`, pero `docs/despliegue-render.md` todavía dice `main`. Se corrige en la fase 9 de `IOT_VIP_SPEC.md`.
-19. Si no se definió `AWS_STORAGE_BUCKET_NAME` en Render, las imágenes subidas desde el admin se pierden en cada deploy.
-20. No hay CI: nadie ejecuta `python manage.py test` ni `check --deploy` antes de cada deploy.
-21. **`Pipfile.lock` desactualizado** (detectado el 2026-11-18): no incluye gunicorn, whitenoise, dj-database-url, psycopg, python-dotenv, django-storages ni segno, aunque el `Pipfile` sí. Render no lo usa (instala con `requirements.txt`), pero `pipenv install` en local instalaría lo viejo. Hay que regenerarlo con `pipenv lock`.
+- **Integrar ramas:** `feat/direccion-entrega` y `feat/ajustes-ui` aún no se fusionan a `feat/render-allocation`.
+- **Imágenes del catálogo en S3:** `cargar_catalogo` apunta a `media/productos/*.jpg`. Mientras no estén en el bucket, la tienda muestra el logo en su lugar.
+- **#15** No hay envío de correos: `MAILERS` usa el backend de consola (`check --deploy` avisa `mail.E001`). Lo necesitarían los recordatorios del calendario.
+- **#16** `SECURE_HSTS_SECONDS` vale `0` por defecto (aviso `security.W004`). Ya se configura por variable de entorno; falta subirlo.
+- **#17** El PostgreSQL gratuito de Render vence a los 30 días. Si se recrea, se pierden pedidos, cumpleaños y fechas (los usuarios demo se recrean en el build).
+- **#20** No hay CI que corra `test` y `check --deploy` antes de cada deploy.
+- **#21** `Pipfile.lock` no incluye las dependencias de despliegue. Hay que regenerarlo con `pipenv lock`.
+- Si las claves de AWS en Render son inválidas, guardar una `ExperienciaQR` en el admin da un error 500 en lugar de un mensaje claro (visto en la fase 11).
 
 **Calidad de código**
-11. `Suscripcion.objects.plan_de()` lanza un `UPDATE` (`expirar_vencidas`) en cada petición de un usuario autenticado, porque lo llama el context processor. Ya está documentado en el docstring. A futuro, moverlo a un cron job.
+- **#11** `Suscripcion.objects.plan_de()` hace un `UPDATE` (`expirar_vencidas`) en cada petición de un usuario autenticado. Ya se calcula una sola vez por petición (`tienda/peticion.py`); a futuro conviene moverlo a un cron.
 
-**Funcionalidad sin implementar**
-- Pasarela de pago para los pedidos y el Sweet Plan (`TODO` en `Suscripcion.contratar_mes`, `models.py:131`).
-- `RecordatorioEvento` y `ExperienciaQR`: los modelos existen, pero no hay flujo.
-- Historial de pedidos del cliente ("Mis pedidos") y seguimiento del estado.
-- Capa IoT de ARCHITECTURE.md: la app `iot`, `/api/rfid/scan/` con token estático, las sesiones VIP, el polling en JS y el firmware del ESP32. **Capa IoT/VIP decidida: seguir [`docs/IOT_VIP_SPEC.md`](IOT_VIP_SPEC.md)**, que se implementa por fases en la rama `feat/iot-vip`.
+**Funcionalidad sin implementar (fuera de alcance por ahora)**
+- Pasarela de pago real para pedidos y Sweet Plan (`TODO` en `Suscripcion.contratar_mes`).
+- Historial "Mis pedidos" y seguimiento del estado del pedido.
+- Avisos por correo de las fechas del calendario (`RecordatorioEvento.notificado`).
+- Uso del kiosco desde el celular.
 
-## 7. Milestones
-
-El siguiente trabajo es la **capa VIP/RFID**, definida en [`docs/IOT_VIP_SPEC.md`](IOT_VIP_SPEC.md) y dividida en fases (un commit por fase, con los tests en verde). Se trabaja en `feat/iot-vip` y se fusiona a `feat/render-allocation`, que es la rama que despliega Render.
-
-| Fase | Contenido | Hallazgos que resuelve |
-|---|---|---|
-| 0 | Rama `feat/iot-vip` y especificación en `docs/` | — |
-| 1 | Modelos: app `iot`, `PerfilVIP`, campos nuevos, admin | — |
-| 2 | Entrega simulada de tarjeta, usuarios demo, ingredientes exclusivos | #9 |
-| 3 | Descuentos VIP (20 %) y de cumpleaños (50 %) | — |
-| 4 | API IoT, inicio de sesión por tarjeta, `/healthz` | — |
-| 5 | Tienda con descuento y polling del kiosco (2 s) | #11 (en parte: un solo cálculo del plan por petición) |
-| 6 | Checkout de cupcakes personalizados | #7, #8 |
-| 7 | Checkout con descuento | — |
-| 8 | Página `/vip/`: cumpleaños, calendario, QR con video en S3 | — |
-| 9 | Despliegue en Render | #16, #18, #19 |
-| 10 | Firmware ESP32 + RC522 | — |
-| 11 | Prueba de humo | — |
-
-**Fuera de alcance por ahora:** pasarela de pago real, CI (#20), backend de correo (#15), "Mis pedidos" y uso del kiosco en celular.
+**Riesgos conocidos** (detalle en [IOT_VIP_SPEC.md](IOT_VIP_SPEC.md#riesgos-conocidos)): el UID de una MIFARE Classic se puede clonar, los videos grandes subidos por el admin pueden agotar la instancia gratuita y el ESP32 solo funciona con Wi-Fi de 2.4 GHz.

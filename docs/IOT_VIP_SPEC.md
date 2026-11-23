@@ -2,6 +2,10 @@
 
 Nov 18, 2026 · @sopadepollo7
 
+> **Estado (2026-11-23): implementada.** Las fases 0 a 10 están terminadas y de la 11 (prueba de humo) faltan 3 pruebas manuales. Este documento se conserva como la especificación de diseño: las notas de cada fase (sección "Fases para Claude Code") dicen qué cambió al implementarla. Para el sistema tal como está hoy, ver [sistema-actual.md](sistema-actual.md); para el orden de los cambios, [historial-de-cambios.md](historial-de-cambios.md).
+>
+> Cambios posteriores a la fase 11 (rama `feat/ajustes-ui`): `/vip/` ya no muestra el estado de la tarjeta en el encabezado, y el cumpleaños se muestra como día, mes y días que faltan.
+
 ## Resumen y alcance
 
 La capa VIP se agrega al repo existente de Bake & Made (Django 6.1.1 en Render, rama `feat/render-allocation`) como una app nueva `iot` más un perfil VIP en `usuarios`. VIP y Sweet Plan son lo mismo: todo usuario con Sweet vigente tiene 20 % (50 % en su cumpleaños), calendario y video, haya iniciado sesión con contraseña o con su tarjeta.

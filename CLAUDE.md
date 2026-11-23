@@ -3,8 +3,10 @@
 **Bake & Made** es una tienda en línea de repostería: un monolito Django 6.1.1 (Python 3.13) que se despliega en Render con PostgreSQL. Las reglas del proyecto están en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) y se aplican a todo el código.
 
 ## Documentación
+- [README.md](README.md): qué es el proyecto, arranque rápido y guía de la documentación.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): visión, decisiones de diseño y reglas de código. **Manda sobre todo lo demás.**
-- [docs/analisis-estado-actual.md](docs/analisis-estado-actual.md): arquitectura, modelos, rutas, hallazgos y hoja de ruta.
+- [docs/sistema-actual.md](docs/sistema-actual.md): el sistema hoy (apps, modelos, rutas, comandos, tests y pendientes).
+- [docs/historial-de-cambios.md](docs/historial-de-cambios.md): cómo se recibió el proyecto y qué cambió en cada etapa. Agrega ahí cada cambio relevante.
 - [docs/despliegue-render.md](docs/despliegue-render.md): Web Service + PostgreSQL, build y start command, variables de entorno.
 - [docs/IOT_VIP_SPEC.md](docs/IOT_VIP_SPEC.md): especificación de la capa VIP/RFID (modelos, descuentos, API, kiosco, firmware y fases).
 - [docs/diagramas.md](docs/diagramas.md): diagramas Mermaid (panorama, local vs Render, despliegue, ingredientes, login por tarjeta, descuento). Actualízalos si cambias esas piezas.
@@ -17,7 +19,7 @@ cd bakeandmade                      # aquí está manage.py
 python manage.py migrate
 python manage.py cargar_catalogo    # datos iniciales; se puede repetir sin duplicar
 python manage.py runserver
-python manage.py test               # tests de tienda y usuarios
+python manage.py test               # tests de tienda, usuarios e iot
 ```
 
 ## Mapa del código
@@ -47,7 +49,7 @@ python manage.py test               # tests de tienda y usuarios
 - `firmware/esp32-vip/`: lector RFID (PlatformIO, ESP32 + RC522). Credenciales en `include/secrets.h` (en `.gitignore`; plantilla `secrets.example.h`). Pines, LEDs y lectura de UID en su `README.md`. Se carga con `cargar.ps1` (Windows; PlatformIO se cuelga compilando sobre `\\wsl.localhost\...`, así que compila en una copia en `%LOCALAPPDATA%`) o `cargar.sh` (WSL, con `usbipd-win`). No es parte del despliegue en Render.
 
 ## Reglas (de ARCHITECTURE.md)
-- Apps separadas por responsabilidad: `tienda`, `usuarios` y, a futuro, `iot`.
+- Apps separadas por responsabilidad: `tienda`, `usuarios` e `iot`.
 - **Type hints** en todas las funciones y métodos.
 - **Docstrings (PEP 257)** que expliquen el qué y el por qué.
 - **Fat models, skinny views**: la lógica nueva va en modelos o QuerySets, no en vistas.

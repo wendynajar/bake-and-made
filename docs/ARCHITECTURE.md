@@ -1,5 +1,7 @@
 # Arquitectura del Sistema - Bake & Made VIP Experience
 
+> Este documento es la **visión y las reglas** del proyecto, y manda sobre todo lo demás. Cómo quedó implementado está en [sistema-actual.md](sistema-actual.md), y el orden en que se hizo en [historial-de-cambios.md](historial-de-cambios.md).
+
 ## 1. Visión General
 Este documento define la arquitectura, decisiones de diseño y flujo de ciclo de vida para el proyecto "Bake & Made VIP". El sistema integra hardware IoT (ESP32 + RFID) con una plataforma de comercio electrónico dinámica (Django), permitiendo una experiencia O2O (Online-to-Offline) donde interacciones físicas desencadenan cambios en tiempo real en la interfaz web (descuentos, calendarios y contenido multimedia interactivo).
 
@@ -21,7 +23,7 @@ El sistema se compone de cuatro capas principales:
 Para mantener el repositorio limpio y alineado con los requerimientos, se han tomado las siguientes decisiones arquitectónicas:
 
 *   **Django como framework Monolítico + API:** Se elige Django por su robusto ORM, que mapea perfectamente el modelo relacional (Usuarios, Suscripciones, Pedidos, Menú). Se usará para servir las vistas HTML y exponer un único endpoint `/api/rfid/scan/` para el hardware.
-*   **Polling (Vanilla JS) vs WebSockets:** Para la sincronización de estado web, se utilizará *Polling* (consultas HTTP GET cada 3-5 segundos desde el cliente) en lugar de WebSockets. 
+*   **Polling (Vanilla JS) vs WebSockets:** Para la sincronización de estado web, se utilizará *Polling* (consultas HTTP GET cada 3-5 segundos desde el cliente) en lugar de WebSockets. *Implementado:* cada 2 s (`IOT_POLL_SEGUNDOS`), para que el inicio de sesión por tarjeta tarde 4 s o menos (ver IOT_VIP_SPEC.md).
     *   *Fundamento:* Simplifica drásticamente el despliegue en infraestructuras Serverless/PaaS como Render, evitando la complejidad de mantener conexiones persistentes (ASGI/Redis), ideal para la escala actual del proyecto.
 *   **Despliegue en Render (PaaS):** 
     *   *Fundamento:* Permite integración CI/CD directa con GitHub. Ofrece PostgreSQL administrado y gestión automática de certificados SSL (HTTPS), requisito indispensable para las peticiones del ESP32.
@@ -44,7 +46,9 @@ Para que los agentes de IA y los desarrolladores puedan leer, mantener y escalar
 
 ## 5. Flujo de Ciclo de Vida del Desarrollo
 
-El desarrollo se divide en cuatro fases secuenciales:
+El desarrollo se divide en cuatro fases secuenciales.
+
+> En la práctica, la capa VIP/RFID se construyó en las fases 0 a 11 de [IOT_VIP_SPEC.md](IOT_VIP_SPEC.md#fases-para-claude-code), que recorren estas cuatro: modelos y contrato de la API (fases 0, 1 y 4), construcción (2 a 8 y 10), pruebas (los tests de cada fase) y despliegue (9 y 11). Las cuatro están hechas; de la prueba en producción faltan 3 pruebas manuales.
 
 ### Fase 1: Planteamiento (Planning)
 *   **Diseño de Base de Datos:** Traducción del diagrama ER a modelos de Django.
