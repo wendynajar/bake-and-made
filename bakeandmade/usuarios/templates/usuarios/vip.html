@@ -33,10 +33,10 @@
           data-url-cumpleanios="{% url 'vip_cumpleanios' %}"
           data-csrf="{{ csrf_token }}">
 
-        <!-- Encabezado: vigencia, descuento de hoy y tarjeta -->
+        <!-- Encabezado: vigencia y descuento de hoy -->
         <section class="vip-hero">
             <span class="section-kicker">MEMBRESÍA VIP</span>
-            <h1>VIP — <em>{{ user.first_name|default:user.username }}</em></h1>
+            <h1>{{ user.first_name|default:user.username }}</h1>
 
             {% if vip_es_cumpleanios %}
                 <p class="vip-felicitacion">¡Feliz cumpleaños! Hoy tienes {{ vip_porcentaje }} % de descuento en toda la tienda.</p>
@@ -51,18 +51,6 @@
                     <dt>Tu descuento de hoy</dt>
                     <dd>{{ vip_porcentaje }} %{% if vip_es_cumpleanios %} · Cumpleaños{% endif %}</dd>
                 </div>
-                <div>
-                    <dt>Tarjeta VIP</dt>
-                    <dd>
-                        {% if tarjeta and tarjeta.activa %}
-                            Entregada · termina en …{{ tarjeta.uid|slice:"-2:" }}
-                        {% elif tarjeta %}
-                            Desactivada · pide una nueva en tienda
-                        {% else %}
-                            En camino
-                        {% endif %}
-                    </dd>
-                </div>
             </dl>
         </section>
 
@@ -72,21 +60,24 @@
             <section class="vip-card" aria-labelledby="titulo-cumple">
                 <h2 id="titulo-cumple">Tu cumpleaños</h2>
                 {% if perfil.fecha_nacimiento %}
+                    {% with mes=perfil.fecha_nacimiento|date:"F" %}
                     <div class="vip-cumple">
                         <span class="vip-cumple-dia">{{ perfil.fecha_nacimiento|date:"j" }}</span>
-                        <div class="vip-cumple-detalle">
-                            <span class="vip-cumple-mes">{{ perfil.fecha_nacimiento|date:"F" }}</span>
-                            <p class="vip-cumple-cuenta">
-                                {% if dias_cumple == 0 %}
-                                    ¡Es hoy!
-                                {% elif dias_cumple == 1 %}
-                                    Falta <strong>1</strong> día
-                                {% else %}
-                                    Faltan <strong>{{ dias_cumple }}</strong> días
-                                {% endif %}
-                            </p>
+                        {# --letras ajusta el tamaño del mes al ancho disponible (ver vip.css). #}
+                        <div class="vip-cumple-detalle" style="--letras: {{ mes|length }}">
+                            <span class="vip-cumple-mes">{{ mes }}</span>
                         </div>
                     </div>
+                    {% endwith %}
+                    <p class="vip-cumple-cuenta">
+                        {% if dias_cumple == 0 %}
+                            ¡Es hoy!
+                        {% elif dias_cumple == 1 %}
+                            Falta <strong>1</strong> día
+                        {% else %}
+                            Faltan <strong>{{ dias_cumple }}</strong> días
+                        {% endif %}
+                    </p>
                     <p class="vip-nota">Para corregirla, pídelo en tienda.</p>
                 {% else %}
                     <p>Regístralo y ese día tu descuento sube a 50 %.</p>
