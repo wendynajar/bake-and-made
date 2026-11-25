@@ -17,11 +17,13 @@ from iot.models import TarjetaRFID
 from usuarios.models import PerfilVIP
 
 from .forms import DireccionEntregaForm
+from .management.commands import cargar_catalogo
 from .models import (
     PLAN_BASIC,
     PLAN_SWEET,
     CategoriaIngrediente,
     CupcakePersonalizado,
+    DetallesMenu,
     ErrorPedido,
     ExperienciaQR,
     Ingrediente,
@@ -656,6 +658,64 @@ class ImagenesCatalogoTests(TestCase):
 
         producto = Menu.objects.get(nombre_producto='Cupcake red velvet')
         self.assertEqual(producto.imagen.name, 'productos/nueva.jpg')
+
+
+class RecetasCatalogoTests(TestCase):
+    """`cargar_catalogo` llena `DetallesMenu` sin duplicar ni pisar recetas del admin."""
+
+    def receta(self, nombre: str) -> set[tuple[str, str, int]]:
+        return {
+            (d.ingrediente.categoria.nombre, d.ingrediente.nombre, d.cantidad)
+            for d in DetallesMenu.objects.filter(menu__nombre_producto=nombre)
+        }
+
+    def test_todos_los_productos_tienen_receta(self) -> None:
+        call_command('cargar_catalogo', stdout=StringIO())
+
+        sin_receta = Menu.objects.filter(detallesmenu__isnull=True)
+        self.assertFalse(sin_receta.exists(), list(sin_receta))
+        self.assertEqual(
+            self.receta('Brownie de chocolate'),
+            {('Base', 'Chocolate', 1), ('Relleno', 'Chocolate', 1)},
+        )
+        self.assertIn(('Base', 'Chocolate', 10), self.receta('Pastel de chocolate'))
+
+    def test_repetir_no_duplica(self) -> None:
+        call_command('cargar_catalogo', stdout=StringIO())
+        total = DetallesMenu.objects.count()
+
+        call_command('cargar_catalogo', stdout=StringIO())
+
+        self.assertEqual(DetallesMenu.objects.count(), total)
+
+    def test_completa_la_receta_de_un_producto_existente(self) -> None:
+        Menu.objects.create(nombre_producto='Cupcake red velvet', descripcion='-', precio_base=Decimal('45.00'))
+
+        call_command('cargar_catalogo', stdout=StringIO())
+
+        self.assertEqual(
+            self.receta('Cupcake red velvet'),
+            {('Base', 'Red velvet', 1), ('Cobertura', 'Queso crema', 1)},
+        )
+
+    def test_no_reemplaza_una_receta_editada_en_el_admin(self) -> None:
+        call_command('cargar_catalogo', stdout=StringIO())
+        producto = Menu.objects.get(nombre_producto='Galleta de mantequilla')
+        DetallesMenu.objects.filter(menu=producto).update(cantidad=3)
+
+        call_command('cargar_catalogo', stdout=StringIO())
+
+        self.assertEqual(self.receta('Galleta de mantequilla'), {('Base', 'Vainilla', 3)})
+
+    def test_omite_un_ingrediente_que_no_existe(self) -> None:
+        receta = [('Base', 'Red velvet', 1), ('Cobertura', 'Merengue', 1)]
+        salida = StringIO()
+
+        with mock.patch.dict(cargar_catalogo.RECETAS, {'Cupcake red velvet': receta}):
+            call_command('cargar_catalogo', stdout=salida)
+
+        self.assertEqual(self.receta('Cupcake red velvet'), {('Base', 'Red velvet', 1)})
+        self.assertIn('no existe el ingrediente Merengue', salida.getvalue())
 
 
 class EncabezadoComunTests(TestCase):

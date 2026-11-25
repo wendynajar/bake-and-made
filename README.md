@@ -38,7 +38,7 @@ cd bakeandmade                      # aquí está manage.py
 python manage.py migrate
 python manage.py cargar_catalogo    # catálogo e ingredientes; se puede repetir
 python manage.py runserver
-python manage.py test               # 157 tests (tienda, usuarios e iot)
+python manage.py test               # 165 tests (tienda, usuarios e iot)
 ```
 
 Para probar la capa VIP sin hardware:
@@ -49,8 +49,6 @@ DEMO_PASSWORD=algo-local python manage.py crear_usuarios_demo --uids A1B2C3D4,B2
 python manage.py createsuperuser    # entra como staff a /kiosco/caja-1/
 python manage.py simular_scan A1B2C3D4 --terminal caja-1   # en otra terminal
 ```
-
-> `Pipfile.lock` está desactualizado (no incluye gunicorn, whitenoise, segno, etc.). Si usas Pipenv, corre antes `pipenv lock`, o instala con `pip install -r requirements.txt`, que es lo que usa Render.
 
 ## Estructura del repo
 

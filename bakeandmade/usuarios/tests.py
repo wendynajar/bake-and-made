@@ -28,6 +28,7 @@ class RegistroTests(TestCase):
         'first_name': 'Eli',
         'last_name': 'Pérez',
         'email': 'Eli@Ejemplo.com',
+        'telefono': '55 1234-5678',
         'password1': 'pastel-de-fresa-2026',
         'password2': 'pastel-de-fresa-2026',
     }
@@ -38,6 +39,23 @@ class RegistroTests(TestCase):
         usuario = User.objects.get(username='eli')
         self.assertEqual(usuario.email, 'eli@ejemplo.com')
         self.assertEqual(int(self.client.session['_auth_user_id']), usuario.pk)
+
+    def test_registro_guarda_el_telefono_sin_separadores(self) -> None:
+        self.client.post(reverse('registro'), self.datos)
+        usuario = User.objects.get(username='eli')
+        self.assertEqual(usuario.perfil_vip.telefono, '5512345678')
+
+    def test_telefono_obligatorio_de_10_digitos(self) -> None:
+        for telefono in ('', '55123', '551234567890', '55-1234-567a'):
+            with self.subTest(telefono=telefono):
+                respuesta = self.client.post(reverse('registro'), {**self.datos, 'telefono': telefono})
+                self.assertEqual(respuesta.status_code, 200)
+                self.assertFalse(User.objects.filter(username='eli').exists())
+                self.assertTrue(respuesta.context['formulario'].errors['telefono'])
+
+    def test_el_formulario_muestra_el_telefono_despues_del_correo(self) -> None:
+        campos = list(self.client.get(reverse('registro')).context['formulario'].fields)
+        self.assertEqual(campos.index('telefono'), campos.index('email') + 1)
 
     def test_correo_duplicado_es_rechazado(self) -> None:
         User.objects.create_user('otro', email='eli@ejemplo.com', password='x-clave-segura-1')

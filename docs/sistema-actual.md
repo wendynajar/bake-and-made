@@ -16,7 +16,7 @@ Bake & Made es una tienda en línea de repostería hecha como un **monolito Djan
 
 Además, `firmware/esp32-vip/` tiene el programa del lector (ESP32 + RC522), que se carga aparte y no forma parte del despliegue.
 
-**Estado:** las fases 0 a 10 de la capa VIP están terminadas y la 11 (prueba de humo en Render) está casi completa. Hay **157 tests y todos pasan** (verificado el 2026-11-23).
+**Estado:** la capa VIP está completa: las fases 0 a 11 están terminadas, incluida la prueba de humo en Render (confirmada el 2026-11-23). Hay **165 tests y todos pasan** (verificado el 2026-11-23).
 
 ## 2. Herramientas y dependencias
 
@@ -35,7 +35,7 @@ Además, `firmware/esp32-vip/` tiene el programa del lector (ESP32 + RC522), que
 | Frontend | Plantillas Django, CSS propio y JS vanilla (`premium.js`, `vip.js`, `polling.js`) |
 | Firmware | PlatformIO, `espressif32@6.9.0`, `MFRC522@1.4.11` |
 | Idioma y zona horaria | `es-mx` y `America/Mexico_City` |
-| Dependencias | `requirements.txt` (lo usa Render) y `Pipfile` (desarrollo). **`Pipfile.lock` está desactualizado** (pendiente #21) |
+| Dependencias | `requirements.txt` (lo usa Render) y `Pipfile` + `Pipfile.lock` (desarrollo), sincronizados |
 
 ## 3. Estructura del repositorio
 
@@ -115,14 +115,14 @@ Decisiones que conviene conocer antes de tocar el código:
 | App | Modelo | Para qué se usa |
 |---|---|---|
 | `tienda` | `CategoriaProducto`, `Menu` | Catálogo con stock e imagen |
-| `tienda` | `DetallesMenu` | Solo en el admin |
+| `tienda` | `DetallesMenu` | Receta de cada producto del catálogo: qué ingredientes lleva y cuántas porciones (`cantidad`). La llena `cargar_catalogo` y se edita en el admin. Por ahora es informativa: vender un producto del catálogo no descuenta ingredientes |
 | `tienda` | `CategoriaIngrediente`, `Ingrediente` | Asistente de personalización. `solo_suscriptores` marca los exclusivos del Sweet, `activo` oculta uno y `stock_disponible` baja en cada venta |
 | `tienda` | `CupcakePersonalizado`, `CupcakeIngredientes` | Se guardan al comprar, con `dietas` y `color_frosting` para la cocina. `precio_calculado` es el precio base, sin descuento |
 | `tienda` | `Pedido`, `DetallePedido` | Pedido con `direccion_entrega` (texto armado desde el formulario), `descuento_porcentaje` y `motivo_descuento`. `DetallePedido.precio_unitario` ya trae el descuento |
 | `tienda` | `Suscripcion` | Sweet Plan mensual. `contratar_mes()` también entrega una tarjeta RFID |
 | `tienda` | `RecordatorioEvento` | Fechas del calendario VIP. Cumpleaños y aniversarios se repiten cada año. `notificado` aún no se usa porque no hay envío de correos |
 | `tienda` | `ExperienciaQR` | Video del usuario en S3 con `codigo_unico` y `fecha_expiracion` |
-| `usuarios` | `PerfilVIP` | Teléfono, `fecha_nacimiento` y `cumple_registrado_en`. El cumpleaños se registra una sola vez y después solo el admin lo cambia |
+| `usuarios` | `PerfilVIP` | Teléfono (se pide al registrarse), `fecha_nacimiento` y `cumple_registrado_en`. El cumpleaños se registra una sola vez y después solo el admin lo cambia |
 | `iot` | `TarjetaRFID` | Inventario de tarjetas. El UID se normaliza (mayúsculas, sin separadores). `usuario` queda vacío mientras esté libre |
 | `iot` | `Terminal` | Un kiosco (p. ej. `caja-1`): tarjeta activa, último rechazo, última actividad y `version` |
 | `iot` | `LecturaRFID` | Bitácora de cada lectura y su resultado |
@@ -134,7 +134,7 @@ Hay diagramas de los ingredientes y del flujo del descuento en [diagramas.md](di
 | Ruta | Quién la usa | Qué hace |
 |---|---|---|
 | `/` | Todos | Catálogo (`Menu.objects.en_venta()`), con el precio VIP si aplica |
-| `/registro/`, `/login/`, `/logout/` | Todos | Autenticación. El logout es por POST y, en un kiosco, conserva la vinculación |
+| `/registro/`, `/login/`, `/logout/` | Todos | Autenticación. El registro pide teléfono de 10 dígitos y lo guarda en `PerfilVIP`. El logout es por POST y, en un kiosco, conserva la vinculación |
 | `/carrito/` (+ `agregar/`, `actualizar/`, `personalizado/<i>/…`) | Todos | Carrito de productos y personalizados, con el renglón de descuento VIP |
 | `/personalizar/`, `/personalizar/<paso>/`, `/personalizar/agregar/` | Todos | Asistente base → relleno → cobertura → topping → resumen. El precio se recalcula en el servidor |
 | `/checkout/` | Con sesión | Dirección por campos (`DireccionEntregaForm`), validación en el servidor y pedido con descuento |
@@ -155,20 +155,20 @@ Hay diagramas de los ingredientes y del flujo del descuento en [diagramas.md](di
 
 | Comando | App | Qué hace |
 |---|---|---|
-| `cargar_catalogo` | `tienda` | Crea las categorías, productos e ingredientes que falten sin modificar los existentes. La única excepción: completa la imagen (`IMAGENES`, en `media/productos/`) de un producto que no tenga. Render lo corre en cada build |
+| `cargar_catalogo` | `tienda` | Crea las categorías, productos e ingredientes que falten sin modificar los existentes. Las únicas excepciones: completa la imagen (`IMAGENES`, en `media/productos/`) y la receta (`RECETAS`, tabla `DetallesMenu`) de un producto que no tenga. Render lo corre en cada build |
 | `crear_terminal <codigo>` | `iot` | Crea una terminal de kiosco (`build.sh` crea `caja-1`) |
 | `registrar_tarjeta <uid>` | `iot` | Agrega una tarjeta libre al inventario |
 | `simular_scan <uid> --terminal caja-1` | `iot` | Simula una lectura del ESP32, para probar sin hardware |
-| `crear_usuarios_demo` | `usuarios` | Crea a Ana, Bruno y Carla con Sweet vigente y tarjeta. Requiere `DEMO_PASSWORD` y `--uids` o `DEMO_VIP_UIDS` |
+| `crear_usuarios_demo` | `usuarios` | Crea a Ana, Bruno y Carla con Sweet vigente y tarjeta. Requiere `DEMO_PASSWORD` y `--uids` o `DEMO_VIP_UIDS`. Como `build.sh` lo corre en cada deploy, **cada deploy restablece** su contraseña (`DEMO_PASSWORD`), nombre y teléfono, y les vuelve a contratar el Sweet si venció |
 
 ## 8. Tests
 
-157 tests con `unittest` de Django (`python manage.py test`), todos en verde:
+165 tests con `unittest` de Django (`python manage.py test`), todos en verde:
 
 | App | Clases |
 |---|---|
-| `tienda` (75) | `SumarUnMesTests`, `SuscripcionTests`, `IngredientesVisiblesTests`, `PrecioCupcakeTests`, `PedidoTests`, `CheckoutVistaTests`, `DireccionEntregaFormTests`, `DireccionCheckoutVistaTests`, `CheckoutPersonalizadosTests`, `CheckoutVIPTests`, `PaginasPublicasTests`, `CamposVIPTests`, `IngredientesExclusivosTests`, `ImagenesCatalogoTests`, `EncabezadoComunTests`, `ImagenFaltanteTests`, `DescuentoVIPTests`, `AplicarDescuentoTests`, `TiendaVIPTests`, `KioscoPlantillaTests`, `EntregaTarjetaMensajeTests` |
-| `usuarios` (41) | `RegistroTests`, `PerfilVIPTests`, `UsuariosDemoTests`, `CumpleaniosTests`, `DiasParaCumpleaniosTests`, `FechasVIPTests`, `CumpleaniosAPITests`, `VideoQRTests`, `PaginaVIPTests` |
+| `tienda` (80) | `SumarUnMesTests`, `SuscripcionTests`, `IngredientesVisiblesTests`, `PrecioCupcakeTests`, `PedidoTests`, `CheckoutVistaTests`, `DireccionEntregaFormTests`, `DireccionCheckoutVistaTests`, `CheckoutPersonalizadosTests`, `CheckoutVIPTests`, `PaginasPublicasTests`, `CamposVIPTests`, `IngredientesExclusivosTests`, `ImagenesCatalogoTests`, `RecetasCatalogoTests`, `EncabezadoComunTests`, `ImagenFaltanteTests`, `DescuentoVIPTests`, `AplicarDescuentoTests`, `TiendaVIPTests`, `KioscoPlantillaTests`, `EntregaTarjetaMensajeTests` |
+| `usuarios` (44) | `RegistroTests`, `PerfilVIPTests`, `UsuariosDemoTests`, `CumpleaniosTests`, `DiasParaCumpleaniosTests`, `FechasVIPTests`, `CumpleaniosAPITests`, `VideoQRTests`, `PaginaVIPTests` |
 | `iot` (41) | `NormalizarUidTests`, `TarjetasLibresTests`, `ComandosIotTests`, `EntregaTarjetaTests`, `ScanAPITests`, `LoginTarjetaTests`, `KioscoTests`, `HealthzTests`, `SimularScanTests` |
 
 No hay CI: los tests se corren a mano antes de fusionar a `feat/render-allocation`.
@@ -177,11 +177,6 @@ No hay CI: los tests se corren a mano antes de fusionar a `feat/render-allocatio
 
 Los números son los del análisis original, para poder rastrearlos en [historial-de-cambios.md](historial-de-cambios.md).
 
-**Por terminar de la capa VIP (prueba de humo, fase 11).** Faltan tres pruebas manuales en Render:
-- checkout con 20 % que incluya un cupcake personalizado;
-- cumpleaños de Carla con 50 % y felicitación;
-- Sweet vencido de Bruno, que debe mostrar "Renueva tu Sweet Plan".
-
 **Producción y configuración**
 - **Integrar ramas:** `feat/direccion-entrega` y `feat/ajustes-ui` aún no se fusionan a `feat/render-allocation`.
 - **Imágenes del catálogo en S3:** `cargar_catalogo` apunta a `media/productos/*.jpg`. Mientras no estén en el bucket, la tienda muestra el logo en su lugar.
@@ -189,7 +184,6 @@ Los números son los del análisis original, para poder rastrearlos en [historia
 - **#16** `SECURE_HSTS_SECONDS` vale `0` por defecto (aviso `security.W004`). Ya se configura por variable de entorno; falta subirlo.
 - **#17** El PostgreSQL gratuito de Render vence a los 30 días. Si se recrea, se pierden pedidos, cumpleaños y fechas (los usuarios demo se recrean en el build).
 - **#20** No hay CI que corra `test` y `check --deploy` antes de cada deploy.
-- **#21** `Pipfile.lock` no incluye las dependencias de despliegue. Hay que regenerarlo con `pipenv lock`.
 - Si las claves de AWS en Render son inválidas, guardar una `ExperienciaQR` en el admin da un error 500 en lugar de un mensaje claro (visto en la fase 11).
 
 **Calidad de código**

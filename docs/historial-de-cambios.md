@@ -16,7 +16,7 @@ El punto de partida es el commit `a400a83` (2026-10-25, "Añadido planes de susc
 
 **Qué funcionaba:**
 - catálogo con stock, carrito en la sesión y checkout con control de inventario y un token para no duplicar pedidos;
-- asistente de 4 pasos para armar cupcakes personalizados, con filtro de dietas;
+- asistente de 4 pasos para armar cupcakes personalizados, con filtro de dietas, que los agregaba al carrito (pero el checkout no los cobraba: ver #7);
 - Sweet Plan mensual con pago simulado (`tienda/suscripciones.py`);
 - registro, login y logout (las plantillas vivían en `tienda`);
 - un diseño propio en CSS (`premium.css`, `carrito-premium.css`, `checkout-premium.css`).
@@ -58,7 +58,7 @@ El punto de partida es el commit `a400a83` (2026-10-25, "Añadido planes de susc
 | Checkout | Solo productos | Productos y personalizados, revalidados en el servidor, con descuento VIP y dirección por campos |
 | Sweet Plan | Pago simulado, sin beneficios reales | 20 % de descuento (50 % en el cumpleaños), ingredientes exclusivos, página `/vip/` y tarjeta RFID |
 | Tienda física | No existía | Kiosco con inicio de sesión por tarjeta (ESP32 + RC522) |
-| Tests | 0 | 157, todos en verde |
+| Tests | 0 | 165, todos en verde |
 | Documentación | Ninguna | README, CLAUDE.md y `docs/` |
 
 ## 3. Preparación para Render (`03bea44`, 2026-11-17)
@@ -89,12 +89,12 @@ El punto de partida es el commit `a400a83` (2026-10-25, "Añadido planes de susc
 | 3 | `5e3b247` | Descuentos: 20 % con Sweet vigente y 50 % en el cumpleaños | `PerfilVIP.descuento_vigente()` es la única fuente de la regla. El cumpleaños se registra una sola vez y no cuenta si se registra ese mismo día |
 | 4 | `f1cba2b` | API del lector (`/api/rfid/scan/`), `/healthz`, `/kiosco/<codigo>/`, `/api/iot/estado/`, `/api/iot/salir/`, `iot.sesion.sincronizar()` y `simular_scan` | El ESP32 solo avisa; el kiosco pregunta. `Terminal.version` evita que un rechazo viejo saque a quien entró después |
 | 5 | `dd09da7`, `4b5fcf1` | Precios con descuento en la tienda y el carrito, pestaña "VIP" y `polling.js` | Como las páginas no heredan de `base.html`, lo común va en fragmentos (`_vip_nav.html`, `_kiosco.html`). Polling cada 2 s para cumplir el criterio de 4 s. #11 en parte: el plan se calcula una vez por petición |
-| 6 | `e73c735` | Checkout de cupcakes personalizados | Resuelve #7 y #8. Los ingredientes de la sesión se vuelven a validar en el servidor y su stock se descuenta. Se guardan `dietas` y `color_frosting` (migración `tienda.0008`) |
+| 6 | `e73c735` | Checkout de cupcakes personalizados. El asistente y el carrito ya existían desde el inicio; lo nuevo es que el checkout los cobre, los guarde y descuente sus ingredientes | Resuelve #7 y #8. Los ingredientes de la sesión se vuelven a validar en el servidor y su stock se descuenta. Se guardan `dietas` y `color_frosting` (migración `tienda.0008`) |
 | 7 | `734e150` | Checkout con descuento | Redondeo por línea. El pedido guarda `descuento_porcentaje` y `motivo_descuento`, y `DetallePedido.precio_unitario` ya trae el descuento |
 | 8 | `5581c5c` | Página `/vip/`: cumpleaños con aviso, calendario (FullCalendar) y QR con el video en S3 (`segno`) | Las vistas viven en `usuarios/views_vip.py`. Cada usuario solo ve sus fechas |
 | 9 | `15416ec`, `29cc4ae` | Despliegue de la capa VIP en https://bake-and-made.onrender.com | `IOT_DEVICE_TOKEN` y `crear_terminal` en el build, Health Check `/healthz`. Verificado con `curl`. Resuelve #18 y #19 |
 | 10 | `2d4cecc`, `a4ab75e` | Firmware del ESP32 + RC522 y scripts `cargar.ps1` y `cargar.sh` | Verificado con hardware: tarjeta → ESP32 → Render → sesión iniciada en el kiosco. Los UID demo se registran en Render con un deploy, no con el comando local |
-| 11 | `d764f28` | Prueba de humo en Render y `docs/diagramas.md` | 21 de 21 pruebas automáticas contra Render y casi todas las manuales. Un 500 al guardar videos era por claves de AWS inválidas en Render. **Faltan 3 pruebas manuales** (ver [sistema-actual.md](sistema-actual.md#9-pendientes)) |
+| 11 | `d764f28` | Prueba de humo en Render y `docs/diagramas.md` | 21 de 21 pruebas automáticas contra Render y casi todas las manuales. Un 500 al guardar videos era por claves de AWS inválidas en Render. Las últimas 3 pruebas manuales (checkout con 20 % y cupcake personalizado, cumpleaños con 50 % y Sweet vencido) se confirmaron el 2026-11-23 |
 
 ## 5. Ajustes posteriores
 
@@ -117,6 +117,27 @@ En `main` había un commit (`413b025`, "Actualiza checkout y catalogo") hecho so
 | `ae63039` | `CLAUDE.md` documenta el encabezado común y el respaldo de imágenes |
 | `5816290`, `7096078` | `/vip/` más limpia: el título es solo el nombre, se quitó el estado de la tarjeta RFID del resumen y el tamaño del mes se ajusta a su largo. Se centró el título "Mi video" |
 
+### Cierre de la capa VIP (2026-11-23)
+
+- **Prueba de humo completa:** se confirmaron en Render las 3 pruebas manuales que faltaban: checkout con 20 % y un cupcake personalizado, cumpleaños con 50 % y felicitación, y Sweet vencido (la tarjeta se rechaza con "Renueva tu Sweet Plan" y, con contraseña, la cuenta entra como normal, sin VIP).
+- **`Pipfile.lock` regenerado** con `pipenv lock`: ahora incluye las mismas dependencias que `requirements.txt` (#21).
+- **Documentación:** `README.md`, este historial y `sistema-actual.md` (antes `analisis-estado-actual.md`).
+
+### Recetas del catálogo y teléfono en el registro (2026-11-23)
+
+| Cambio | Por qué |
+|---|---|
+| `cargar_catalogo` llena `DetallesMenu` con la receta de los 13 productos (`RECETAS`), usando solo los 15 ingredientes existentes. `cantidad` son porciones: 1 por pieza, 10 por pastel y 6 por caja. Solo se crea la receta de un producto que no tenga ninguna | La tabla venía del modelo original y nadie la llenaba. No se le agregaron campos. Como el build corre `cargar_catalogo`, la base de Render se completa en el siguiente deploy sin migración. Tests `RecetasCatalogoTests` |
+| El registro pide **teléfono** (10 dígitos; acepta espacios y guiones) y lo guarda en `PerfilVIP.telefono` | El campo ya existía en la base, pero solo lo tenían los usuarios demo y quien lo capturara en el admin. Tests nuevos en `RegistroTests` |
+
+Se revisó por qué las contraseñas de Ana, Bruno y Carla volvían a la original: `build.sh` corre `crear_usuarios_demo` en cada deploy y este les vuelve a poner `DEMO_PASSWORD`. Se decidió dejarlo así (queda documentado en [sistema-actual.md](sistema-actual.md#7-comandos-de-gestión)).
+
+### Wi-Fi del lector: hotspot del celular (2026-11-23)
+
+| Cambio | Por qué |
+|---|---|
+| El firmware usa `WiFiMulti` con una lista de redes (`WIFI_REDES` en `secrets.h`); la primera es el hotspot de un celular con nombre y clave fijos. Un `secrets.h` con `WIFI_SSID`/`WIFI_PASS` sigue compilando | Antes había que cambiar la red y volver a cargar el firmware en cada lugar. Además, el hotspot evita los portales cautivos. Guía en el [README del firmware](../firmware/esp32-vip/README.md#red-el-hotspot-del-celular) |
+
 ## 6. Hallazgos del análisis original y su estado
 
 | # | Hallazgo | Estado |
@@ -133,7 +154,7 @@ En `main` había un commit (`413b025`, "Actualiza checkout y catalogo") hecho so
 | 10 | Código muerto | ✅ Etapa 1 |
 | 11 | `UPDATE` de suscripciones en cada petición | 🟡 Se calcula una vez por petición (fase 5); falta moverlo a un cron |
 | 12 | Archivos sueltos | ✅ Etapa 1 |
-| 13 | Sin tests | ✅ 18 en la etapa 1, 157 hoy |
+| 13 | Sin tests | ✅ 18 en la etapa 1, 165 hoy |
 | 14 | Rutas en un solo archivo | ✅ Etapa 1 |
 | 15 | Correo con backend de consola | ⏳ Pendiente |
 | 16 | HSTS en 0 | 🟡 Configurable por variable de entorno; falta subirlo |
@@ -141,6 +162,6 @@ En `main` había un commit (`413b025`, "Actualiza checkout y catalogo") hecho so
 | 18 | La guía de despliegue decía `main` | ✅ Fase 9 |
 | 19 | Imágenes perdidas sin bucket | ✅ Fase 9 |
 | 20 | Sin CI | ⏳ Pendiente |
-| 21 | `Pipfile.lock` desactualizado | ⏳ Pendiente |
+| 21 | `Pipfile.lock` desactualizado | ✅ Regenerado con `pipenv lock` (2026-11-23) |
 
 Los hallazgos 15 a 21 se detectaron después de la etapa 1, ya con el proyecto en Render.

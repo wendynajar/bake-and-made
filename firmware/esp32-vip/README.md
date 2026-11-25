@@ -28,13 +28,38 @@ Lee la tarjeta VIP, envía su UID a `POST /api/rfid/scan/` en Render y enciende 
    cd firmware/esp32-vip
    cp include/secrets.example.h include/secrets.h
    ```
-   - `WIFI_SSID` / `WIFI_PASS`: red de **2.4 GHz** sin portal cautivo.
+   - `WIFI_REDES`: una o más redes de **2.4 GHz** sin portal cautivo; la primera, el [hotspot del celular](#red-el-hotspot-del-celular).
    - `API_URL`: `https://bake-and-made.onrender.com` (sin `/` final).
    - `IOT_DEVICE_TOKEN`: el mismo valor que en el panel de Render.
    - `TERMINAL`: `caja-1`.
 3. Conecta el ESP32 por USB y usa el script de tu entorno (ver [Cargar el programa](#cargar-el-programa)). Compila, carga el programa y abre el monitor serie.
 
    Debe aparecer `RC522: Firmware Version: 0x92` (o `0x91`). Si sale `0x00` o `0xFF`, revisa los cables.
+
+## Red: el hotspot del celular
+
+El lector solo necesita internet para llegar a Render, así que puede usar el hotspot de un celular. El nombre y la clave se graban una vez en `WIFI_REDES`; al cambiar de lugar basta con encender el hotspot con **ese mismo nombre y clave**, sin volver a cargar el firmware.
+
+```cpp
+#define WIFI_REDES {"BakeMade-IoT", "cambia-esta-clave"}
+// o con más redes:
+#define WIFI_REDES {"BakeMade-IoT", "cambia-esta-clave"}, {"red-de-casa", "su-clave"}
+```
+
+Configuración del celular:
+
+- **Nombre y clave** idénticos a los de `WIFI_REDES` (distingue mayúsculas), sin acentos ni emojis. Clave de 8 a 63 caracteres.
+- **Nombre en iPhone:** es el del teléfono (Ajustes → General → Información → Nombre).
+- **Banda de 2.4 GHz:** en Android, en los ajustes del punto de acceso; en iPhone, activa **Maximizar compatibilidad**.
+- **Seguridad WPA2-Personal**, no "solo WPA3", y red **visible** (no oculta).
+- En iPhone, deja abierta la pantalla **Compartir Internet** mientras se conecta el lector.
+
+Cómo se comporta:
+
+- Se conecta a la red conocida con **mejor señal**, no a la primera de la lista. Si la clave de esa red está mal, sigue intentando con ella: corrige o quita las redes que ya no sirvan.
+- Si se cae la red, vuelve a buscar con pausas de 10 s. Durante cada búsqueda, que tarda unos segundos, no lee tarjetas.
+- Un `secrets.h` anterior, con `WIFI_SSID` y `WIFI_PASS`, sigue compilando con una sola red.
+- Solo aplica con `API_URL` apuntando a Render. Contra un `runserver` local, la IP de la computadora cambia en cada red.
 
 ## Cargar el programa
 
@@ -103,7 +128,7 @@ Define también `DEMO_PASSWORD` y vuelve a desplegar: `build.sh` crea los 3 usua
 | `HTTP 404` `desconocida` | rojo | UID no registrado, sin dueño o tarjeta desactivada |
 | `HTTP 401` | rojo | `IOT_DEVICE_TOKEN` distinto al de Render |
 | `HTTP 400` `terminal_desconocida` | rojo | `TERMINAL` no existe (el build crea `caja-1`) |
-| `HTTP -100` | rojo | Sin Wi-Fi (el lector reintenta la red cada 10 s) |
+| `HTTP -100` | rojo | Sin Wi-Fi: revisa que el [hotspot](#red-el-hotspot-del-celular) esté encendido (el lector reintenta con pausas de 10 s) |
 | `HTTP -101` | rojo | `API_URL` mal escrita |
 | `HTTP -11` o tarda ~15 s | rojo | Timeout: Render estaba dormido; la siguiente lectura ya responde rápido |
 | `HTTP -1` | rojo | Conexión rechazada: revisa `API_URL` y que el servicio esté arriba |

@@ -76,7 +76,7 @@ gunicorn es el servidor WSGI de producción: levanta `WEB_CONCURRENCY` procesos 
 
 ```bash
 cp .env.example .env          # pon DEBUG=True y deja DATABASE_URL vacía para usar SQLite
-pipenv install                # Pipfile.lock está desactualizado: corre antes `pipenv lock` (hallazgo #21)
+pipenv install                # o: pip install -r requirements.txt
 cd bakeandmade
 python manage.py migrate
 python manage.py cargar_catalogo

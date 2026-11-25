@@ -14,8 +14,21 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <WiFiMulti.h>
 
-#include "secrets.h"  // WIFI_SSID, WIFI_PASS, API_URL, IOT_DEVICE_TOKEN, TERMINAL
+#include "secrets.h"  // WIFI_REDES, API_URL, IOT_DEVICE_TOKEN, TERMINAL
+
+// --- Redes Wi-Fi --------------------------------------------------------------
+struct RedWifi {
+  const char* ssid;
+  const char* clave;
+};
+
+// Un secrets.h anterior a WIFI_REDES, con una sola red, sigue compilando.
+#ifndef WIFI_REDES
+#define WIFI_REDES {WIFI_SSID, WIFI_PASS}
+#endif
+constexpr RedWifi REDES[] = {WIFI_REDES};
 
 // --- Pines --------------------------------------------------------------------
 // RC522 en el SPI por defecto del ESP32: SCK 18, MISO 19, MOSI 23.
@@ -29,8 +42,8 @@ constexpr uint8_t PIN_LED_ROJO = 26;
 constexpr unsigned long PING_MS = 10UL * 60UL * 1000UL;  // /healthz cada 10 min
 constexpr unsigned long ANTIRREBOTE_MS = 3000;           // misma tarjeta: ignorar 3 s
 constexpr unsigned long LED_MS = 1500;                   // tiempo encendido del LED
-constexpr unsigned long REINTENTO_WIFI_MS = 10000;       // reconectar Wi-Fi cada 10 s
-constexpr unsigned long ESPERA_WIFI_INICIAL_MS = 20000;  // no bloquear el arranque
+constexpr unsigned long REINTENTO_WIFI_MS = 10000;       // pausa entre intentos de Wi-Fi
+constexpr unsigned long ESPERA_WIFI_INICIAL_MS = 20000;  // al arrancar, seguir sin red tras ~20 s
 constexpr uint16_t TIMEOUT_HTTP_MS = 15000;              // Render puede tardar si despierta
 
 // Códigos propios; los negativos de -1 a -11 son de HTTPClient (p. ej. -11 = timeout).
@@ -38,6 +51,7 @@ constexpr int SIN_WIFI = -100;
 constexpr int URL_INVALIDA = -101;
 
 MFRC522 rfid(PIN_RC522_SS, PIN_RC522_RST);
+WiFiMulti wifiMulti;
 
 String ultimoUid;
 unsigned long ultimoMs = 0;
@@ -72,17 +86,27 @@ void apagarLedSiToca() {
   }
 }
 
-// Reintenta el Wi-Fi sin bloquear: el lector sigue imprimiendo UIDs aunque no haya red
-// (así se pueden leer las 3 tarjetas antes de configurar el Wi-Fi).
+// Busca las redes de WIFI_REDES y se conecta a la de mejor señal. run() bloquea unos
+// segundos (escaneo + conexión), por eso el intervalo se cuenta desde que termina: entre
+// un intento y otro el lector siempre tiene tiempo de leer tarjetas.
+void intentarWifi() {
+  wifiMulti.run();
+  ultimoIntentoWifi = millis();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("Wi-Fi OK: \"%s\", IP %s\n", WiFi.SSID().c_str(),
+                  WiFi.localIP().toString().c_str());
+  }
+}
+
+// Reintenta el Wi-Fi cada REINTENTO_WIFI_MS: entre intentos el lector sigue imprimiendo
+// UIDs aunque no haya red (así se pueden leer las 3 tarjetas antes de configurar el Wi-Fi).
 void mantenerWifi() {
   if (WiFi.status() == WL_CONNECTED) {
     return;
   }
   if (millis() - ultimoIntentoWifi >= REINTENTO_WIFI_MS) {
-    ultimoIntentoWifi = millis();
-    Serial.println("Wi-Fi desconectado; reintentando...");
-    WiFi.disconnect();
-    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    Serial.println("Wi-Fi desconectado; buscando redes conocidas...");
+    intentarWifi();
   }
 }
 
@@ -123,17 +147,21 @@ void setup() {
   rfid.PCD_DumpVersionToSerial();  // "0x92" o "0x91" = lector conectado bien
 
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  ultimoIntentoWifi = millis();
-  Serial.printf("Conectando a \"%s\"", WIFI_SSID);
-  while (WiFi.status() != WL_CONNECTED && millis() - ultimoIntentoWifi < ESPERA_WIFI_INICIAL_MS) {
-    delay(300);
-    Serial.print(".");
+  Serial.println("Redes conocidas:");
+  for (const RedWifi& red : REDES) {
+    if (wifiMulti.addAP(red.ssid, red.clave)) {
+      Serial.printf("  - %s\n", red.ssid);
+    } else {
+      Serial.printf("  - \"%s\" descartada: revisa el largo del nombre y la clave\n", red.ssid);
+    }
   }
-  Serial.println();
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("Wi-Fi OK, IP %s\n", WiFi.localIP().toString().c_str());
-  } else {
+  unsigned long inicioWifi = millis();
+  intentarWifi();
+  while (WiFi.status() != WL_CONNECTED && millis() - inicioWifi < ESPERA_WIFI_INICIAL_MS) {
+    mantenerWifi();
+    delay(300);
+  }
+  if (WiFi.status() != WL_CONNECTED) {
     Serial.println("Sin Wi-Fi por ahora: los UID se imprimen igual y se reintenta la red.");
   }
   Serial.printf("Terminal %s lista. Pasa una tarjeta.\n", TERMINAL);

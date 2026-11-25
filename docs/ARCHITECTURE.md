@@ -48,7 +48,7 @@ Para que los agentes de IA y los desarrolladores puedan leer, mantener y escalar
 
 El desarrollo se divide en cuatro fases secuenciales.
 
-> En la práctica, la capa VIP/RFID se construyó en las fases 0 a 11 de [IOT_VIP_SPEC.md](IOT_VIP_SPEC.md#fases-para-claude-code), que recorren estas cuatro: modelos y contrato de la API (fases 0, 1 y 4), construcción (2 a 8 y 10), pruebas (los tests de cada fase) y despliegue (9 y 11). Las cuatro están hechas; de la prueba en producción faltan 3 pruebas manuales.
+> En la práctica, la capa VIP/RFID se construyó en las fases 0 a 11 de [IOT_VIP_SPEC.md](IOT_VIP_SPEC.md#fases-para-claude-code), que recorren estas cuatro: modelos y contrato de la API (fases 0, 1 y 4), construcción (2 a 8 y 10), pruebas (los tests de cada fase) y despliegue (9 y 11). Las cuatro están hechas, incluida la prueba de humo en producción (2026-11-23).
 
 ### Fase 1: Planteamiento (Planning)
 *   **Diseño de Base de Datos:** Traducción del diagrama ER a modelos de Django.

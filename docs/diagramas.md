@@ -83,6 +83,8 @@ Todos los pasos del build son **idempotentes**: se pueden repetir en cada deploy
 ```mermaid
 erDiagram
     CategoriaIngrediente ||--o{ Ingrediente : agrupa
+    Menu ||--o{ DetallesMenu : "receta"
+    Ingrediente ||--o{ DetallesMenu : "forma parte de"
     Ingrediente ||--o{ CupcakeIngredientes : "se usa en"
     CupcakePersonalizado ||--o{ CupcakeIngredientes : lleva
     User ||--o{ CupcakePersonalizado : arma
@@ -109,6 +111,9 @@ erDiagram
     }
     CupcakeIngredientes {
         int cantidad
+    }
+    DetallesMenu {
+        int cantidad "porciones por unidad (cargar_catalogo)"
     }
     DetallePedido {
         int cantidad

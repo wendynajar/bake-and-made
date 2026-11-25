@@ -1,8 +1,8 @@
 """Comando `cargar_catalogo`: datos iniciales del catálogo (se puede ejecutar varias veces).
 
 Usa get_or_create, por lo que es seguro incluirlo en el build de Render.
-Crea lo que falte y no modifica lo existente; la única excepción es completar la
-imagen de un producto que no tenga ninguna.
+Crea lo que falte y no modifica lo existente; las únicas excepciones son
+completar la imagen y la receta (`DetallesMenu`) de un producto que no tenga.
 """
 
 from decimal import Decimal
@@ -11,7 +11,13 @@ from typing import Any
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from tienda.models import Menu, CategoriaProducto, CategoriaIngrediente, Ingrediente
+from tienda.models import (
+    CategoriaIngrediente,
+    CategoriaProducto,
+    DetallesMenu,
+    Ingrediente,
+    Menu,
+)
 
 
 PRODUCTOS = [
@@ -102,6 +108,78 @@ INGREDIENTES = [
     ("Topping", "Sprinkles de colores", "2.00"),
     ("Topping", "Fresas", "5.00"),
 ]
+
+RECETAS: dict[str, list[tuple[str, str, int]]] = {
+    # Producto: [(categoría del ingrediente, ingrediente, cantidad), ...]
+    # Solo usa ingredientes de INGREDIENTES; "Chocolate" existe como Base y como
+    # Relleno, por eso cada uno se identifica con su categoría. La cantidad está
+    # en porciones de ingrediente: 1 por pieza individual, 10 por pastel y 6 por caja.
+    "Cupcake red velvet": [
+        ("Base", "Red velvet", 1),
+        ("Cobertura", "Queso crema", 1),
+    ],
+    "Cupcake de fresa": [
+        ("Base", "Vainilla", 1),
+        ("Relleno", "Fresa", 1),
+        ("Topping", "Fresas", 1),
+    ],
+    "Cupcake de zanahoria": [
+        ("Base", "Zanahoria", 1),
+        ("Cobertura", "Queso crema", 1),
+    ],
+    "Galleta con chispas de chocolate": [
+        ("Base", "Vainilla", 1),
+        ("Topping", "Chispas de chocolate", 1),
+    ],
+    "Galleta red velvet": [
+        ("Base", "Red velvet", 1),
+    ],
+    "Galleta de mantequilla": [
+        ("Base", "Vainilla", 1),
+    ],
+    "Brownie de chocolate": [
+        ("Base", "Chocolate", 1),
+        ("Relleno", "Chocolate", 1),
+    ],
+    "Cheesecake de fresa": [
+        ("Topping", "Galleta triturada", 1),
+        ("Cobertura", "Queso crema", 1),
+        ("Relleno", "Fresa", 1),
+    ],
+    "Pastel de chocolate": [
+        ("Base", "Chocolate", 10),
+        ("Relleno", "Chocolate", 10),
+        ("Cobertura", "Buttercream de chocolate", 10),
+    ],
+    "Pastel de tres leches": [
+        ("Base", "Vainilla", 10),
+        ("Relleno", "Crema de vainilla", 10),
+        ("Cobertura", "Buttercream de vainilla", 10),
+    ],
+    "Pastel de zanahoria": [
+        ("Base", "Zanahoria", 10),
+        ("Cobertura", "Queso crema", 10),
+    ],
+    "Caja de 6 cupcakes": [
+        ("Base", "Vainilla", 3),
+        ("Base", "Chocolate", 3),
+        ("Cobertura", "Buttercream de vainilla", 3),
+        ("Cobertura", "Buttercream de chocolate", 3),
+        ("Topping", "Sprinkles de colores", 6),
+    ],
+    "Caja de regalo dulce": [
+        ("Base", "Vainilla", 2),
+        ("Base", "Chocolate", 2),
+        ("Topping", "Chispas de chocolate", 2),
+        ("Topping", "Sprinkles de colores", 2),
+    ],
+}
+"""Receta de cada producto del catálogo (tabla `DetallesMenu`).
+
+Solo se aplica a productos sin receta: si alguien edita la receta en el admin,
+`cargar_catalogo` ya no la toca.
+"""
+
 
 class Command(BaseCommand):
     """Carga el catálogo inicial de Bake & Made."""
@@ -205,9 +283,48 @@ class Command(BaseCommand):
                 self.style.SUCCESS(f"Creado: {nombre}")
             )
 
+        recetas_creadas = self._cargar_recetas()
+
         self.stdout.write(
             self.style.SUCCESS(
                 f"Catálogo cargado. Nuevos: {creados}. "
-                f"Existentes: {existentes}."
+                f"Existentes: {existentes}. Recetas nuevas: {recetas_creadas}."
             )
         )
+
+    def _cargar_recetas(self) -> int:
+        """Crea la receta (`DetallesMenu`) de cada producto que todavía no tenga.
+
+        Un producto que ya tiene al menos un renglón de receta se deja como está,
+        para no pisar lo que se haya editado en el admin. Si falta un ingrediente
+        (por ejemplo, se borró en el admin), se omite ese renglón con un aviso.
+        Devuelve cuántas recetas se crearon.
+        """
+        ingredientes = {
+            (ingrediente.categoria.nombre, ingrediente.nombre): ingrediente
+            for ingrediente in Ingrediente.objects.select_related("categoria")
+        }
+        recetas_creadas = 0
+
+        for nombre, renglones in RECETAS.items():
+            producto = Menu.objects.filter(nombre_producto=nombre).first()
+            if producto is None or DetallesMenu.objects.filter(menu=producto).exists():
+                continue
+
+            detalles = []
+            for categoria_nombre, ingrediente_nombre, cantidad in renglones:
+                ingrediente = ingredientes.get((categoria_nombre, ingrediente_nombre))
+                if ingrediente is None:
+                    self.stdout.write(self.style.WARNING(
+                        f"Receta de {nombre}: no existe el ingrediente "
+                        f"{ingrediente_nombre} ({categoria_nombre}); se omite."
+                    ))
+                    continue
+                detalles.append(DetallesMenu(menu=producto, ingrediente=ingrediente, cantidad=cantidad))
+
+            if detalles:
+                DetallesMenu.objects.bulk_create(detalles)
+                recetas_creadas += 1
+                self.stdout.write(f"Receta creada: {nombre}")
+
+        return recetas_creadas
