@@ -367,11 +367,18 @@ class Menu(models.Model):
 
 
 class DetallesMenu(models.Model):
-    """Ingredientes que componen un producto del menú (receta)."""
+    """Ingredientes que componen un producto del menú (receta).
+
+    `cargar_catalogo` la llena para los productos del catálogo (RECETAS);
+    `cantidad` son porciones del ingrediente por unidad vendida del producto.
+    """
 
     menu = models.ForeignKey(Menu, on_delete=models.CASCADE)
     ingrediente = models.ForeignKey(Ingrediente, on_delete=models.CASCADE)
     cantidad = models.IntegerField(default=1)
+
+    def __str__(self) -> str:
+        return f'{self.menu}: {self.ingrediente} x{self.cantidad}'
 
 
 # =============================================================================

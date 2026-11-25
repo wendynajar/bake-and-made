@@ -68,13 +68,15 @@ gunicorn es el servidor WSGI de producción: levanta `WEB_CONCURRENCY` procesos 
 1. Crea el bucket en la región de `AWS_S3_REGION_NAME`, con **Block all public access** activado (las URLs firmadas no necesitan acceso público).
 2. Crea un usuario IAM solo para la app, con una política limitada a ese bucket: `s3:GetObject`, `s3:PutObject` y `s3:DeleteObject` sobre `arn:aws:s3:::<bucket>/*`, y `s3:ListBucket` sobre `arn:aws:s3:::<bucket>`.
 3. Genera sus claves de acceso y cópialas a `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY` en Render. Nunca al repo.
-4. Los archivos se guardan bajo `media/` (`media/videos/` para los videos). Sube videos cortos desde el admin (menos de ~30 MB): el archivo pasa por la instancia de Render, que tiene poca memoria y un timeout de 30 s.
+4. Los archivos se guardan bajo `media/` (`media/videos/` para los videos y `media/productos/` para las imágenes del catálogo). Sube videos cortos desde el admin (menos de ~30 MB): el archivo pasa por la instancia de Render, que tiene poca memoria y un timeout de 30 s.
+
+5. **Imágenes del catálogo.** `cargar_catalogo` asigna a cada producto una ruta de `IMAGENES` (p. ej. `productos/crv.jpg`) solo al crearlo o si no tiene imagen; nunca pisa una imagen cambiada en el admin. Los archivos deben subirse al bucket en `media/productos/` con esos nombres. Mientras falten, la tienda muestra el logo en su lugar.
 
 ## Desarrollo local
 
 ```bash
 cp .env.example .env          # pon DEBUG=True y deja DATABASE_URL vacía para usar SQLite
-pipenv install                # Pipfile.lock está desactualizado: corre antes `pipenv lock` (hallazgo #21)
+pipenv install                # o: pip install -r requirements.txt
 cd bakeandmade
 python manage.py migrate
 python manage.py cargar_catalogo

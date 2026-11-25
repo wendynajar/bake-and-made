@@ -3,8 +3,10 @@
 **Bake & Made** es una tienda en línea de repostería: un monolito Django 6.1.1 (Python 3.13) que se despliega en Render con PostgreSQL. Las reglas del proyecto están en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) y se aplican a todo el código.
 
 ## Documentación
+- [README.md](README.md): qué es el proyecto, arranque rápido y guía de la documentación.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): visión, decisiones de diseño y reglas de código. **Manda sobre todo lo demás.**
-- [docs/analisis-estado-actual.md](docs/analisis-estado-actual.md): arquitectura, modelos, rutas, hallazgos y hoja de ruta.
+- [docs/sistema-actual.md](docs/sistema-actual.md): el sistema hoy (apps, modelos, rutas, comandos, tests y pendientes).
+- [docs/historial-de-cambios.md](docs/historial-de-cambios.md): cómo se recibió el proyecto y qué cambió en cada etapa. Agrega ahí cada cambio relevante.
 - [docs/despliegue-render.md](docs/despliegue-render.md): Web Service + PostgreSQL, build y start command, variables de entorno.
 - [docs/IOT_VIP_SPEC.md](docs/IOT_VIP_SPEC.md): especificación de la capa VIP/RFID (modelos, descuentos, API, kiosco, firmware y fases).
 - [docs/diagramas.md](docs/diagramas.md): diagramas Mermaid (panorama, local vs Render, despliegue, ingredientes, login por tarjeta, descuento). Actualízalos si cambias esas piezas.
@@ -17,13 +19,13 @@ cd bakeandmade                      # aquí está manage.py
 python manage.py migrate
 python manage.py cargar_catalogo    # datos iniciales; se puede repetir sin duplicar
 python manage.py runserver
-python manage.py test               # tests de tienda y usuarios
+python manage.py test               # tests de tienda, usuarios e iot
 ```
 
 ## Mapa del código
 - `bakeandmade/bakeandmade/settings.py`: toda la configuración se lee de variables de entorno (python-dotenv). WhiteNoise sirve los estáticos y S3 guarda las imágenes subidas (`/media`) si se define `AWS_STORAGE_BUCKET_NAME`.
 - `bakeandmade/bakeandmade/urls.py`: hace `include()` de `usuarios.urls` y `tienda.urls`.
-- `bakeandmade/usuarios/`: registro, login y logout con el `User` nativo; `PerfilVIP` (teléfono y cumpleaños, `PerfilVIP.de(usuario)`, `.registrar_cumpleanios()`, `.es_cumpleanios()`, `.descuento_vigente()`: **única fuente de la regla de descuento**). Comando `crear_usuarios_demo` (requiere `DEMO_PASSWORD` y `--uids` o `DEMO_VIP_UIDS`).
+- `bakeandmade/usuarios/`: registro (pide teléfono, que `RegistroUsuarioForm.save()` guarda en `PerfilVIP`), login y logout con el `User` nativo; `PerfilVIP` (teléfono y cumpleaños, `PerfilVIP.de(usuario)`, `.registrar_cumpleanios()`, `.es_cumpleanios()`, `.descuento_vigente()`: **única fuente de la regla de descuento**). Comando `crear_usuarios_demo` (requiere `DEMO_PASSWORD` y `--uids` o `DEMO_VIP_UIDS`; `build.sh` lo corre en cada deploy y restablece la contraseña de los demos).
 - `bakeandmade/usuarios/views_vip.py`: página `/vip/` (solo Sweet vigente), APIs `/api/vip/fechas/` (GET/POST), `/api/vip/fechas/<id>/` (DELETE), `/api/vip/cumpleanios/` (POST) y `/vip/v/<codigo>/` (pública: redirige a la URL firmada del video en S3). El calendario usa FullCalendar 6.1.15 por CDN y el QR se genera con `segno`.
 - `bakeandmade/iot/`: `TarjetaRFID` (inventario, `.objects.libres()`, `.entregar_a()`, UID normalizado con `normalizar_uid`), `Terminal` (`.registrar_lectura()`, `.activar/rechazar/salir()`, `.expirar_si_inactiva()`) y `LecturaRFID`.
   - `iot/sesion.py`: `sincronizar(request, terminal)` inicia o cierra la sesión del kiosco según la terminal, conservando carrito y terminal. Cualquier cierre de sesión en un kiosco debe pasar por aquí (lo usa `usuarios.views.CerrarSesionView`).
@@ -42,12 +44,12 @@ python manage.py test               # tests de tienda y usuarios
 - Plantillas: las páginas no heredan de `base.html`. Lo común va en fragmentos incluidos en todas: `tienda/_encabezado.html` (anuncio y navbar, con el diseño de "Mi carrito"; cámbialo ahí, no en cada página; login y registro no lo usan), que incluye `tienda/_vip_nav.html` (pestaña "VIP", entre el carrito y el saludo), e `iot/_kiosco.html` (polling y barra del kiosco, antes de `</body>`). Toda `<img>` de producto lleva un `<template>` previo con el logo y `onerror` que lo usa si el archivo no existe. Contexto VIP y de kiosco en `usuarios.context_processors.vip`.
 - `bakeandmade/tienda/views.py`: vistas delgadas (HTTP → modelos → plantilla/redirect).
 - `bakeandmade/tienda/forms.py`: `DireccionEntregaForm` (dirección del checkout por campos; `.como_texto()` la une en `Pedido.direccion_entrega`, sin migración). Se dibuja con `tienda/_campo_direccion.html`.
-- `cargar_catalogo`: crea lo que falte sin modificar lo existente; la única excepción es completar la imagen (`IMAGENES`) de un producto que no tenga. Las imágenes deben estar en `media/productos/` (S3 en Render).
+- `cargar_catalogo`: crea lo que falte sin modificar lo existente; las únicas excepciones son completar la imagen (`IMAGENES`) y la receta (`RECETAS` → `DetallesMenu`) de un producto que no tenga. Las imágenes deben estar en `media/productos/` (S3 en Render).
 
 - `firmware/esp32-vip/`: lector RFID (PlatformIO, ESP32 + RC522). Credenciales en `include/secrets.h` (en `.gitignore`; plantilla `secrets.example.h`). Pines, LEDs y lectura de UID en su `README.md`. Se carga con `cargar.ps1` (Windows; PlatformIO se cuelga compilando sobre `\\wsl.localhost\...`, así que compila en una copia en `%LOCALAPPDATA%`) o `cargar.sh` (WSL, con `usbipd-win`). No es parte del despliegue en Render.
 
 ## Reglas (de ARCHITECTURE.md)
-- Apps separadas por responsabilidad: `tienda`, `usuarios` y, a futuro, `iot`.
+- Apps separadas por responsabilidad: `tienda`, `usuarios` e `iot`.
 - **Type hints** en todas las funciones y métodos.
 - **Docstrings (PEP 257)** que expliquen el qué y el por qué.
 - **Fat models, skinny views**: la lógica nueva va en modelos o QuerySets, no en vistas.

@@ -1,6 +1,6 @@
 # Diagramas del sistema
 
-Vista rápida de cómo está armado Bake & Made. Los diagramas usan [Mermaid](https://mermaid.js.org/): GitHub los dibuja solo y en VS Code basta la extensión *Markdown Preview Mermaid Support*. Las reglas de código siguen en [ARCHITECTURE.md](ARCHITECTURE.md) y el detalle de la capa VIP en [IOT_VIP_SPEC.md](IOT_VIP_SPEC.md).
+Vista rápida de cómo está armado Bake & Made. Los diagramas usan [Mermaid](https://mermaid.js.org/): GitHub los dibuja solo y en VS Code basta la extensión *Markdown Preview Mermaid Support*. Las reglas de código siguen en [ARCHITECTURE.md](ARCHITECTURE.md), el detalle de la capa VIP en [IOT_VIP_SPEC.md](IOT_VIP_SPEC.md) y la descripción completa del sistema en [sistema-actual.md](sistema-actual.md).
 
 ## 1. Panorama: quién habla con quién
 
@@ -60,14 +60,14 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    DEV["Tu máquina<br/>feat/iot-vip"] -- "git push + PR" --> RA["GitHub<br/>feat/render-allocation"]
+    DEV["Tu máquina<br/>rama de trabajo"] -- "git push + PR" --> RA["GitHub<br/>feat/render-allocation"]
     RA -- "Render detecta el push" --> BUILD
 
     subgraph BUILD["build.sh (cada deploy)"]
         direction TB
         B1["pip install -r requirements.txt"] --> B2["collectstatic"]
         B2 --> B3["migrate<br/>(cambios de tablas y migraciones de datos)"]
-        B3 --> B4["cargar_catalogo<br/>(crea lo que falte)"]
+        B3 --> B4["cargar_catalogo<br/>(crea lo que falte y<br/>completa imágenes faltantes)"]
         B4 --> B5["crear_terminal caja-1"]
         B5 --> B6["createsuperuser<br/>(si hay DJANGO_SUPERUSER_*)"]
         B6 --> B7["crear_usuarios_demo<br/>(si hay DEMO_PASSWORD y DEMO_VIP_UIDS)"]
@@ -83,6 +83,8 @@ Todos los pasos del build son **idempotentes**: se pueden repetir en cada deploy
 ```mermaid
 erDiagram
     CategoriaIngrediente ||--o{ Ingrediente : agrupa
+    Menu ||--o{ DetallesMenu : "receta"
+    Ingrediente ||--o{ DetallesMenu : "forma parte de"
     Ingrediente ||--o{ CupcakeIngredientes : "se usa en"
     CupcakePersonalizado ||--o{ CupcakeIngredientes : lleva
     User ||--o{ CupcakePersonalizado : arma
@@ -109,6 +111,9 @@ erDiagram
     }
     CupcakeIngredientes {
         int cantidad
+    }
+    DetallesMenu {
+        int cantidad "porciones por unidad (cargar_catalogo)"
     }
     DetallePedido {
         int cantidad
