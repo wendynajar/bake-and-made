@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
@@ -35,25 +36,27 @@ PRODUCTOS = [
      "Selección de postres artesanales para regalar."),
 ]
 
+# nombre del producto -> ruta dentro de media/
 IMAGENES = {
-     "Cupcake red velvet": "productos/crv.jpg",
-    "Cupcake de fresa": "productos/cf1.jpg",
-    "Cupcake de zanahoria": "productos/cz.jpg",
+    "Cupcake red velvet": "productos/descarga_3.jpg",
+    "Cupcake de fresa": "productos/descarga_11.jpg",
+    "Cupcake de zanahoria": "productos/Soft_Carrot_Cake_Cupcakes_With_Cream_Cheese_Frosting.jpg",
 
-    "Galleta con chispas de chocolate": "productos/gcc.jpg",
-    "Galleta red velvet": "productos/grv.jpg",
-    "Galleta de mantequilla": "productos/gm.jpg",
+    "Galleta con chispas de chocolate": "productos/Better_than_a_Bakery_Chocolate_Chip_Cookies.jpg",
+    "Galleta red velvet": "productos/descarga_4.jpg",
+    "Galleta de mantequilla": "productos/Pastisetas_con_Mantequilla.jpg",
 
-    "Brownie de chocolate": "productos/bc.jpg",
-    "Cheesecake de fresa": "productos/cf.jpg",
+    "Brownie de chocolate": "productos/descarga_5.jpg",
+    "Cheesecake de fresa": "productos/descarga_6.jpg",
 
-    "Pastel de chocolate": "productos/pc.jpg",
-    "Pastel de tres leches": "productos/ptl.jpg",
-    "Pastel de zanahoria": "productos/pz.jpg",
+    "Pastel de chocolate": "productos/Chocolate_Ganache_Cake.jpg",
+    "Pastel de tres leches": "productos/descarga_7.jpg",
+    "Pastel de zanahoria": "productos/descarga_8.jpg",
 
-    "Caja de 6 cupcakes": "productos/csc.jpg",
-    "Caja de regalo dulce": "productos/crd.jpg",
+    "Caja de 6 cupcakes": "productos/descarga_9.jpg",
+    "Caja de regalo dulce": "productos/A_Sweet_Story_to_Share.jpg",
 }
+
 CATEGORIAS_INGREDIENTES = [
     "Base",
     "Relleno",
@@ -67,6 +70,7 @@ INGREDIENTES = [
     ("Base", "Chocolate", "5.00"),
     ("Base", "Red velvet", "8.00"),
     ("Base", "Zanahoria", "6.00"),
+    # ("Base", "Naranja", "6.00"),  # descomenta y pon el precio real si la quieres
 
     ("Relleno", "Crema de vainilla", "0.00"),
     ("Relleno", "Chocolate", "5.00"),
@@ -83,6 +87,41 @@ INGREDIENTES = [
     ("Topping", "Fresas", "5.00"),
 ]
 
+# (categoría, nombre) -> ruta dentro de media/
+IMAGENES_INGREDIENTES = {
+    ("Base", "Vainilla"): "ingredientes/base_vainilla.jpg",
+    ("Base", "Chocolate"): "ingredientes/base_chocolate.jpg",
+    ("Base", "Red velvet"): "ingredientes/base_red_velvet.jpg",
+    # ("Base", "Naranja"): "ingredientes/base_naranja.jpg",
+
+    ("Relleno", "Crema de vainilla"): "ingredientes/relleno_vainilla.jpg",
+    ("Relleno", "Chocolate"): "ingredientes/relleno_chocolate.jpg",
+    ("Relleno", "Dulce de leche"): "ingredientes/relleno_dulce_de_leche.jpg",
+    ("Relleno", "Fresa"): "ingredientes/relleno_fresas.jpeg",
+
+    ("Cobertura", "Buttercream de vainilla"): "ingredientes/cobertura_buttercream_de_vainilla.jpg",
+    ("Cobertura", "Buttercream de chocolate"): "ingredientes/cobertura_buttercream_de_chocolate.jpg",
+    ("Cobertura", "Queso crema"): "ingredientes/cobertura_queso_crema.jpg",
+
+    ("Topping", "Chispas de chocolate"): "ingredientes/topping_chispas_de_chocolate.jpg",
+    ("Topping", "Galleta triturada"): "ingredientes/topping_galleta_triturada.jpg",
+    ("Topping", "Sprinkles de colores"): "ingredientes/topping_sprinkles.png",
+    ("Topping", "Fresas"): "ingredientes/topping_fresas.jpg",
+}
+
+
+def asignar_imagen(objeto, ruta):
+    """Asigna la imagen solo si el archivo existe, para no dejar rutas rotas."""
+    if not ruta:
+        return False
+    if not (settings.MEDIA_ROOT / ruta).exists():
+        return False
+    if objeto.imagen.name != ruta:
+        objeto.imagen = ruta
+        objeto.save()
+    return True
+
+
 class Command(BaseCommand):
     help = "Carga el catálogo inicial de Bake & Made"
 
@@ -90,34 +129,27 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         creados = 0
         existentes = 0
-
         categorias_creadas = 0
 
+        # --- Categorías de ingredientes ---
         for nombre in CATEGORIAS_INGREDIENTES:
-            categoria, creada = (
-                CategoriaIngrediente.objects.get_or_create(
-                    nombre=nombre
-                )
+            categoria, creada = CategoriaIngrediente.objects.get_or_create(
+                nombre=nombre
             )
 
             if creada:
                 categorias_creadas += 1
                 self.stdout.write(
-                    self.style.SUCCESS(
-                        f"Categoría de ingrediente creada: {nombre}"
-                    )
+                    self.style.SUCCESS(f"Categoría de ingrediente creada: {nombre}")
                 )
             else:
-                self.stdout.write(
-                    f"La categoría de ingrediente ya existe: {nombre}"
-                )
+                self.stdout.write(f"La categoría de ingrediente ya existe: {nombre}")
 
+        # --- Ingredientes ---
         ingredientes_creados = 0
 
         for categoria_nombre, nombre, precio in INGREDIENTES:
-            categoria = CategoriaIngrediente.objects.get(
-                nombre=categoria_nombre
-            )
+            categoria = CategoriaIngrediente.objects.get(nombre=categoria_nombre)
 
             ingrediente, creado = Ingrediente.objects.get_or_create(
                 categoria=categoria,
@@ -132,53 +164,50 @@ class Command(BaseCommand):
 
             if creado:
                 ingredientes_creados += 1
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f"Ingrediente creado: {nombre}"
-                    )
-                )
+                self.stdout.write(self.style.SUCCESS(f"Ingrediente creado: {nombre}"))
             else:
+                self.stdout.write(f"Ingrediente ya existente: {nombre}")
+
+            ruta = IMAGENES_INGREDIENTES.get((categoria_nombre, nombre))
+            if ruta and not asignar_imagen(ingrediente, ruta):
                 self.stdout.write(
-                    f"Ingrediente ya existente: {nombre}"
+                    self.style.WARNING(f"  Falta el archivo de imagen: {ruta}")
                 )
 
-        self.stdout.write(
-            f"Ingredientes nuevos: {ingredientes_creados}"
-        )
+        self.stdout.write(f"Ingredientes nuevos: {ingredientes_creados}")
 
+        # --- Productos ---
         for nombre, categoria_nombre, precio, descripcion in PRODUCTOS:
             categoria, _ = CategoriaProducto.objects.get_or_create(
                 nombre=categoria_nombre
             )
 
-            producto = Menu.objects.filter(nombre_producto=nombre).first()
+            producto, creado = Menu.objects.get_or_create(
+                nombre_producto=nombre,
+                defaults={
+                    "descripcion": descripcion,
+                    "precio_base": Decimal(precio),
+                    "disponible": True,
+                    "categoria": categoria,
+                    "stock": 20,
+                },
+            )
 
-            if producto:
-                if nombre in IMAGENES:
-                    producto.imagen = IMAGENES[nombre]
-                    producto.save()
+            ruta = IMAGENES.get(nombre)
+            if ruta and not asignar_imagen(producto, ruta):
+                self.stdout.write(
+                    self.style.WARNING(f"  Falta el archivo de imagen: {ruta}")
+                )
 
+            if creado:
+                creados += 1
+                self.stdout.write(self.style.SUCCESS(f"Creado: {nombre}"))
+            else:
                 existentes += 1
                 self.stdout.write(f"Ya existe: {nombre}")
-                continue
-
-            Menu.objects.create(
-                nombre_producto=nombre,
-                descripcion=descripcion,
-                precio_base=Decimal(precio),
-                disponible=True,
-                categoria=categoria,
-                stock=20
-            )
-
-            creados += 1
-            self.stdout.write(
-                self.style.SUCCESS(f"Creado: {nombre}")
-            )
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Catálogo cargado. Nuevos: {creados}. "
-                f"Existentes: {existentes}."
+                f"Catálogo cargado. Nuevos: {creados}. Existentes: {existentes}."
             )
         )
