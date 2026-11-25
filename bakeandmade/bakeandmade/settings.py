@@ -164,7 +164,8 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Con AWS_STORAGE_BUCKET_NAME definido, las imágenes subidas van a S3
 # (el disco de Render es efímero). Sin él, se guardan en MEDIA_ROOT.
 AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME', '')
-USAR_S3 = bool(AWS_STORAGE_BUCKET_NAME)
+# Los tests nunca usan S3: `cargar_catalogo` subiría archivos al bucket real.
+USAR_S3 = bool(AWS_STORAGE_BUCKET_NAME) and not EJECUTANDO_TESTS
 
 if USAR_S3:
     AWS_S3_REGION_NAME = os.environ.get('AWS_S3_REGION_NAME', 'us-east-1')

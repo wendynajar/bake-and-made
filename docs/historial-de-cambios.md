@@ -138,6 +138,17 @@ Se revisó por qué las contraseñas de Ana, Bruno y Carla volvían a la origina
 |---|---|
 | El firmware usa `WiFiMulti` con una lista de redes (`WIFI_REDES` en `secrets.h`); la primera es el hotspot de un celular con nombre y clave fijos. Un `secrets.h` con `WIFI_SSID`/`WIFI_PASS` sigue compilando | Antes había que cambiar la red y volver a cargar el firmware en cada lugar. Además, el hotspot evita los portales cautivos. Guía en el [README del firmware](../firmware/esp32-vip/README.md#red-el-hotspot-del-celular) |
 
+### Imágenes del catálogo en producción (2026-11-25)
+
+`main` versionó las imágenes de productos e ingredientes (`9c4808c`, `a1f7eae`) y las asignaba desde `cargar_catalogo`, pero sobre la versión anterior del comando. En producción las 13 imágenes de producto daban 404 en S3: la base apuntaba a `crv.jpg`, `cz.jpg`, etc., que nunca se subieron.
+
+| Cambio | Por qué |
+|---|---|
+| Merge de `main`: se tomaron sus imágenes, sus nombres de archivo e `IMAGENES_INGREDIENTES`; se conservaron las recetas, los exclusivos y los type hints de esta rama | 16 de las 17 imágenes locales eran idénticas a las de `main` con otro nombre. La única distinta es `cf1.jpg` |
+| "Cupcake de fresa" usa `cf1.jpg` y no `descarga_11.jpg` | `descarga_11.jpg` es una caja con galletas y brownies |
+| `cargar_catalogo` sube a S3 las imágenes que falten y corrige las rutas rotas; un error de S3 solo se avisa | Render no sirve `media/` con `DEBUG=False`: versionar el archivo no bastaba |
+| `USAR_S3` es falso al correr los tests | Con un `.env` con bucket, los tests subirían archivos al bucket real |
+
 ## 6. Hallazgos del análisis original y su estado
 
 | # | Hallazgo | Estado |
@@ -154,7 +165,7 @@ Se revisó por qué las contraseñas de Ana, Bruno y Carla volvían a la origina
 | 10 | Código muerto | ✅ Etapa 1 |
 | 11 | `UPDATE` de suscripciones en cada petición | 🟡 Se calcula una vez por petición (fase 5); falta moverlo a un cron |
 | 12 | Archivos sueltos | ✅ Etapa 1 |
-| 13 | Sin tests | ✅ 18 en la etapa 1, 165 hoy |
+| 13 | Sin tests | ✅ 18 en la etapa 1, 170 hoy |
 | 14 | Rutas en un solo archivo | ✅ Etapa 1 |
 | 15 | Correo con backend de consola | ⏳ Pendiente |
 | 16 | HSTS en 0 | 🟡 Configurable por variable de entorno; falta subirlo |

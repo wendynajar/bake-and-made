@@ -7,9 +7,13 @@ from io import StringIO
 from typing import Any
 from unittest import mock
 
+from botocore.exceptions import ClientError
+from django.conf import settings
 from django.contrib.auth.models import AnonymousUser, User
+from django.core.files.base import ContentFile
+from django.core.files.storage import InMemoryStorage, default_storage
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -631,33 +635,92 @@ class IngredientesExclusivosTests(TestCase):
         self.assertIn('Red velvet', bases_sweet)
 
 
+@override_settings(STORAGES={
+    **settings.STORAGES,
+    'default': {'BACKEND': 'django.core.files.storage.InMemoryStorage'},
+})
 class ImagenesCatalogoTests(TestCase):
-    """`cargar_catalogo` pone la imagen de cada producto sin pisar la del admin."""
+    """`cargar_catalogo` publica y asigna las imágenes sin pisar las del admin.
 
-    def test_crea_los_productos_con_su_imagen(self) -> None:
-        call_command('cargar_catalogo', stdout=StringIO())
+    El almacenamiento en memoria hace de S3: empieza vacío, como un bucket nuevo.
+    """
 
-        producto = Menu.objects.get(nombre_producto='Cupcake red velvet')
-        self.assertEqual(producto.imagen.name, 'productos/crv.jpg')
+    RUTA = cargar_catalogo.IMAGENES['Cupcake red velvet']
 
-    def test_completa_la_imagen_de_un_producto_existente_sin_imagen(self) -> None:
-        Menu.objects.create(nombre_producto='Cupcake red velvet', descripcion='-', precio_base=Decimal('45.00'))
-
-        call_command('cargar_catalogo', stdout=StringIO())
-
-        producto = Menu.objects.get(nombre_producto='Cupcake red velvet')
-        self.assertEqual(producto.imagen.name, 'productos/crv.jpg')
-
-    def test_no_reemplaza_la_imagen_puesta_en_el_admin(self) -> None:
-        Menu.objects.create(
+    def crear_cupcake(self, imagen: str = '') -> Menu:
+        return Menu.objects.create(
             nombre_producto='Cupcake red velvet', descripcion='-',
-            precio_base=Decimal('45.00'), imagen='productos/nueva.jpg',
+            precio_base=Decimal('45.00'), imagen=imagen,
         )
 
+    def test_todas_las_imagenes_del_catalogo_estan_en_el_repo(self) -> None:
+        rutas = [*cargar_catalogo.IMAGENES.values(), *cargar_catalogo.IMAGENES_INGREDIENTES.values()]
+        faltantes = [ruta for ruta in rutas if not (settings.MEDIA_ROOT / ruta).is_file()]
+        self.assertEqual(faltantes, [])
+
+    def test_publica_y_asigna_las_imagenes(self) -> None:
         call_command('cargar_catalogo', stdout=StringIO())
 
-        producto = Menu.objects.get(nombre_producto='Cupcake red velvet')
+        for producto in Menu.objects.all():
+            self.assertEqual(producto.imagen.name, cargar_catalogo.IMAGENES[producto.nombre_producto])
+            self.assertTrue(default_storage.exists(producto.imagen.name))
+        for (categoria, nombre), ruta in cargar_catalogo.IMAGENES_INGREDIENTES.items():
+            ingrediente = Ingrediente.objects.get(categoria__nombre=categoria, nombre=nombre)
+            self.assertEqual(ingrediente.imagen.name, ruta)
+            self.assertTrue(default_storage.exists(ruta))
+
+    def test_repetir_no_duplica_archivos(self) -> None:
+        call_command('cargar_catalogo', stdout=StringIO())
+        antes = default_storage.listdir('productos')
+
+        call_command('cargar_catalogo', stdout=StringIO())
+
+        self.assertEqual(default_storage.listdir('productos'), antes)
+
+    def test_completa_la_imagen_de_un_producto_existente_sin_imagen(self) -> None:
+        producto = self.crear_cupcake()
+
+        call_command('cargar_catalogo', stdout=StringIO())
+
+        producto.refresh_from_db()
+        self.assertEqual(producto.imagen.name, self.RUTA)
+
+    def test_reemplaza_una_ruta_cuyo_archivo_no_existe(self) -> None:
+        """Las bases que guardaron las rutas anteriores (`crv.jpg`) se corrigen solas."""
+        producto = self.crear_cupcake('productos/crv.jpg')
+
+        call_command('cargar_catalogo', stdout=StringIO())
+
+        producto.refresh_from_db()
+        self.assertEqual(producto.imagen.name, self.RUTA)
+
+    def test_no_reemplaza_la_imagen_puesta_en_el_admin(self) -> None:
+        default_storage.save('productos/nueva.jpg', ContentFile(b'imagen'))
+        producto = self.crear_cupcake('productos/nueva.jpg')
+
+        call_command('cargar_catalogo', stdout=StringIO())
+
+        producto.refresh_from_db()
         self.assertEqual(producto.imagen.name, 'productos/nueva.jpg')
+
+    def test_sin_archivo_avisa_y_no_deja_una_ruta_rota(self) -> None:
+        salida = StringIO()
+
+        with mock.patch.dict(cargar_catalogo.IMAGENES, {'Cupcake red velvet': 'productos/no-existe.jpg'}):
+            call_command('cargar_catalogo', stdout=salida)
+
+        self.assertFalse(Menu.objects.get(nombre_producto='Cupcake red velvet').imagen)
+        self.assertIn('Falta el archivo de imagen: productos/no-existe.jpg', salida.getvalue())
+
+    def test_un_error_de_s3_no_detiene_el_comando(self) -> None:
+        salida = StringIO()
+        error = ClientError({'Error': {'Code': '403', 'Message': 'Forbidden'}}, 'HeadObject')
+
+        with mock.patch.object(InMemoryStorage, 'exists', side_effect=error):
+            call_command('cargar_catalogo', stdout=salida)
+
+        self.assertEqual(Menu.objects.count(), len(cargar_catalogo.PRODUCTOS))
+        self.assertIn('No se pudo publicar', salida.getvalue())
 
 
 class RecetasCatalogoTests(TestCase):

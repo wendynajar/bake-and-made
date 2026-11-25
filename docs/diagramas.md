@@ -17,7 +17,7 @@ flowchart LR
         DJANGO["Django + gunicorn<br/>apps: tienda, usuarios, iot"]
         PG[("PostgreSQL<br/>bakeandmade-db")]
     end
-    S3[("AWS S3<br/>bake-and-made.bucket<br/>media/videos, media/ingredientes")]
+    S3[("AWS S3<br/>bake-and-made.bucket<br/>media/videos, media/productos, media/ingredientes")]
 
     ESP -- "POST /api/rfid/scan/<br/>Token IOT_DEVICE_TOKEN" --> DJANGO
     ESP -. "GET /healthz cada 10 min<br/>(que Render no se duerma)" .-> DJANGO
@@ -157,7 +157,7 @@ Regla práctica:
 
 - **Ingrediente nuevo del catálogo** → agrégalo en `tienda/management/commands/cargar_catalogo.py` y haz deploy. Si ya alguien lo creó en el admin de Render con la misma categoría y nombre, no pasa nada: `get_or_create` lo encuentra y no lo duplica.
 - **Cambiar precio o volver exclusivo uno que ya existe** → el admin basta si solo importa producción; si debe valer en todas las bases (incluida una nueva), escribe una migración de datos como `0007`.
-- **Imagen del ingrediente** → se sube en el admin (va a S3 en Render). No se puede poner desde `cargar_catalogo`.
+- **Imagen del ingrediente** → agrega el archivo a `media/ingredientes/` (`git add -f`) y su ruta a `IMAGENES_INGREDIENTES`; el build la sube a S3. También se puede subir en el admin, y esa manda.
 - **Ingredientes agregados en el admin de Render** que quieras conservar → cópialos también a `INGREDIENTES` en `cargar_catalogo.py`, para que no se pierdan si la base de Render se recrea.
 
 ## 6. Inicio de sesión con la tarjeta VIP
