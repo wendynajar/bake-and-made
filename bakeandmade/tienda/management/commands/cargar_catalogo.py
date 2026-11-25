@@ -2,12 +2,21 @@
 
 Usa get_or_create, por lo que es seguro incluirlo en el build de Render.
 Crea lo que falte y no modifica lo existente; las únicas excepciones son
-completar la imagen y la receta (`DetallesMenu`) de un producto que no tenga.
+completar la imagen (de productos e ingredientes) y la receta (`DetallesMenu`)
+de un producto que no tenga.
+
+Las imágenes vienen en el repo (`media/`). En Render el disco no se publica: se
+sirven desde S3, así que el comando también sube al bucket las que falten.
 """
 
 from decimal import Decimal
 from typing import Any
 
+from boto3.exceptions import Boto3Error
+from botocore.exceptions import BotoCoreError, ClientError
+from django.conf import settings
+from django.core.files import File
+from django.core.files.storage import Storage
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
@@ -49,25 +58,27 @@ PRODUCTOS = [
      "Selección de postres artesanales para regalar."),
 ]
 
+# Producto -> ruta dentro de media/
 IMAGENES = {
-    "Cupcake red velvet": "productos/crv.jpg",
+    "Cupcake red velvet": "productos/descarga_3.jpg",
     "Cupcake de fresa": "productos/cf1.jpg",
-    "Cupcake de zanahoria": "productos/cz.jpg",
+    "Cupcake de zanahoria": "productos/Soft_Carrot_Cake_Cupcakes_With_Cream_Cheese_Frosting.jpg",
 
-    "Galleta con chispas de chocolate": "productos/gcc.jpg",
-    "Galleta red velvet": "productos/grv.jpg",
-    "Galleta de mantequilla": "productos/gm.jpg",
+    "Galleta con chispas de chocolate": "productos/Better_than_a_Bakery_Chocolate_Chip_Cookies.jpg",
+    "Galleta red velvet": "productos/descarga_4.jpg",
+    "Galleta de mantequilla": "productos/Pastisetas_con_Mantequilla.jpg",
 
-    "Brownie de chocolate": "productos/bc.jpg",
-    "Cheesecake de fresa": "productos/cf.jpg",
+    "Brownie de chocolate": "productos/descarga_5.jpg",
+    "Cheesecake de fresa": "productos/descarga_6.jpg",
 
-    "Pastel de chocolate": "productos/pc.jpg",
-    "Pastel de tres leches": "productos/ptl.jpg",
-    "Pastel de zanahoria": "productos/pz.jpg",
+    "Pastel de chocolate": "productos/Chocolate_Ganache_Cake.jpg",
+    "Pastel de tres leches": "productos/descarga_7.jpg",
+    "Pastel de zanahoria": "productos/descarga_8.jpg",
 
-    "Caja de 6 cupcakes": "productos/csc.jpg",
-    "Caja de regalo dulce": "productos/crd.jpg",
+    "Caja de 6 cupcakes": "productos/descarga_9.jpg",
+    "Caja de regalo dulce": "productos/A_Sweet_Story_to_Share.jpg",
 }
+
 CATEGORIAS_INGREDIENTES = [
     "Base",
     "Relleno",
@@ -93,6 +104,7 @@ INGREDIENTES = [
     ("Base", "Chocolate", "5.00"),
     ("Base", "Red velvet", "8.00"),
     ("Base", "Zanahoria", "6.00"),
+    # ("Base", "Naranja", "6.00"),  # descomenta y pon el precio real si la quieres
 
     ("Relleno", "Crema de vainilla", "0.00"),
     ("Relleno", "Chocolate", "5.00"),
@@ -108,6 +120,28 @@ INGREDIENTES = [
     ("Topping", "Sprinkles de colores", "2.00"),
     ("Topping", "Fresas", "5.00"),
 ]
+
+# (categoría, ingrediente) -> ruta dentro de media/
+IMAGENES_INGREDIENTES = {
+    ("Base", "Vainilla"): "ingredientes/base_vainilla.jpg",
+    ("Base", "Chocolate"): "ingredientes/base_chocolate.jpg",
+    ("Base", "Red velvet"): "ingredientes/base_red_velvet.jpg",
+    # ("Base", "Naranja"): "ingredientes/base_naranja.jpg",
+
+    ("Relleno", "Crema de vainilla"): "ingredientes/relleno_vainilla.jpg",
+    ("Relleno", "Chocolate"): "ingredientes/relleno_chocolate.jpg",
+    ("Relleno", "Dulce de leche"): "ingredientes/relleno_dulce_de_leche.jpg",
+    ("Relleno", "Fresa"): "ingredientes/relleno_fresas.jpeg",
+
+    ("Cobertura", "Buttercream de vainilla"): "ingredientes/cobertura_buttercream_de_vainilla.jpg",
+    ("Cobertura", "Buttercream de chocolate"): "ingredientes/cobertura_buttercream_de_chocolate.jpg",
+    ("Cobertura", "Queso crema"): "ingredientes/cobertura_queso_crema.jpg",
+
+    ("Topping", "Chispas de chocolate"): "ingredientes/topping_chispas_de_chocolate.jpg",
+    ("Topping", "Galleta triturada"): "ingredientes/topping_galleta_triturada.jpg",
+    ("Topping", "Sprinkles de colores"): "ingredientes/topping_sprinkles.png",
+    ("Topping", "Fresas"): "ingredientes/topping_fresas.jpg",
+}
 
 RECETAS: dict[str, list[tuple[str, str, int]]] = {
     # Producto: [(categoría del ingrediente, ingrediente, cantidad), ...]
@@ -181,6 +215,46 @@ Solo se aplica a productos sin receta: si alguien edita la receta en el admin,
 """
 
 
+ERRORES_ALMACENAMIENTO = (OSError, Boto3Error, BotoCoreError, ClientError)
+"""Fallos del disco o de S3: se avisan, pero no deben tirar el deploy."""
+
+
+def publicar_imagen(almacenamiento: Storage, ruta: str) -> bool:
+    """Asegura que `ruta` exista en el almacenamiento y devuelve si quedó disponible.
+
+    En local el almacenamiento es el propio `media/`, así que no hay nada que
+    copiar. Con S3, sube el archivo del repo solo si todavía no está en el bucket.
+    """
+    if almacenamiento.exists(ruta):
+        return True
+
+    archivo = settings.MEDIA_ROOT / ruta
+    if not archivo.is_file():
+        return False
+
+    with archivo.open("rb") as contenido:
+        almacenamiento.save(ruta, File(contenido))
+    return True
+
+
+def completar_imagen(objeto: Menu | Ingrediente, ruta: str) -> bool:
+    """Asigna la imagen del catálogo si el objeto no tiene una que funcione.
+
+    Una imagen puesta en el admin se respeta mientras su archivo exista; si la
+    ruta guardada está rota, se reemplaza. Devuelve si el objeto quedó con imagen.
+    """
+    almacenamiento = objeto.imagen.storage
+    if objeto.imagen and almacenamiento.exists(objeto.imagen.name):
+        return True
+    if not publicar_imagen(almacenamiento, ruta):
+        return False
+
+    if objeto.imagen.name != ruta:
+        objeto.imagen = ruta
+        objeto.save(update_fields=["imagen"])
+    return True
+
+
 class Command(BaseCommand):
     """Carga el catálogo inicial de Bake & Made."""
 
@@ -245,6 +319,10 @@ class Command(BaseCommand):
                     f"Ingrediente ya existente: {nombre}"
                 )
 
+            self._completar_imagen(
+                ingrediente, IMAGENES_INGREDIENTES.get((categoria_nombre, nombre))
+            )
+
         self.stdout.write(
             f"Ingredientes nuevos: {ingredientes_creados}"
         )
@@ -254,29 +332,23 @@ class Command(BaseCommand):
                 nombre=categoria_nombre
             )
 
-            imagen = IMAGENES.get(nombre, "")
             producto = Menu.objects.filter(nombre_producto=nombre).first()
 
             if producto:
-                # Solo completa la imagen si falta: la que se ponga en el admin manda.
-                if imagen and not producto.imagen:
-                    producto.imagen = imagen
-                    producto.save(update_fields=["imagen"])
-                    self.stdout.write(f"Imagen asignada: {nombre}")
-
+                self._completar_imagen(producto, IMAGENES.get(nombre))
                 existentes += 1
                 self.stdout.write(f"Ya existe: {nombre}")
                 continue
 
-            Menu.objects.create(
+            producto = Menu.objects.create(
                 nombre_producto=nombre,
                 descripcion=descripcion,
                 precio_base=Decimal(precio),
                 disponible=True,
                 categoria=categoria,
                 stock=20,
-                imagen=imagen,
             )
+            self._completar_imagen(producto, IMAGENES.get(nombre))
 
             creados += 1
             self.stdout.write(
@@ -291,6 +363,16 @@ class Command(BaseCommand):
                 f"Existentes: {existentes}. Recetas nuevas: {recetas_creadas}."
             )
         )
+
+    def _completar_imagen(self, objeto: Menu | Ingrediente, ruta: str | None) -> None:
+        """Completa la imagen y avisa, sin detener el comando, si no se pudo."""
+        if not ruta:
+            return
+        try:
+            if not completar_imagen(objeto, ruta):
+                self.stdout.write(self.style.WARNING(f"Falta el archivo de imagen: {ruta}"))
+        except ERRORES_ALMACENAMIENTO as error:
+            self.stdout.write(self.style.WARNING(f"No se pudo publicar {ruta}: {error}"))
 
     def _cargar_recetas(self) -> int:
         """Crea la receta (`DetallesMenu`) de cada producto que todavía no tenga.

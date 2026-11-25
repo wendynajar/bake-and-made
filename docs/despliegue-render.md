@@ -70,7 +70,7 @@ gunicorn es el servidor WSGI de producción: levanta `WEB_CONCURRENCY` procesos 
 3. Genera sus claves de acceso y cópialas a `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY` en Render. Nunca al repo.
 4. Los archivos se guardan bajo `media/` (`media/videos/` para los videos y `media/productos/` para las imágenes del catálogo). Sube videos cortos desde el admin (menos de ~30 MB): el archivo pasa por la instancia de Render, que tiene poca memoria y un timeout de 30 s.
 
-5. **Imágenes del catálogo.** `cargar_catalogo` asigna a cada producto una ruta de `IMAGENES` (p. ej. `productos/crv.jpg`) solo al crearlo o si no tiene imagen; nunca pisa una imagen cambiada en el admin. Los archivos deben subirse al bucket en `media/productos/` con esos nombres. Mientras falten, la tienda muestra el logo en su lugar.
+5. **Imágenes del catálogo.** Se versionan en `bakeandmade/media/productos/` y `bakeandmade/media/ingredientes/`. Render no publica esa carpeta: en cada build `cargar_catalogo` sube al bucket las que falten y las asigna según `IMAGENES` e `IMAGENES_INGREDIENTES`. Respeta la imagen puesta en el admin mientras su archivo exista; si la ruta guardada está rota, la reemplaza. Si S3 falla, solo avisa en el log y la tienda muestra el logo. `media` está en `.gitignore`, así que una imagen nueva del catálogo se agrega con `git add -f`. Para cambiar una imagen ya publicada usa otro nombre de archivo: el comando no sobrescribe lo que está en el bucket.
 
 ## Desarrollo local
 

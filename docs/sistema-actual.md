@@ -155,7 +155,7 @@ Hay diagramas de los ingredientes y del flujo del descuento en [diagramas.md](di
 
 | Comando | App | Qué hace |
 |---|---|---|
-| `cargar_catalogo` | `tienda` | Crea las categorías, productos e ingredientes que falten sin modificar los existentes. Las únicas excepciones: completa la imagen (`IMAGENES`, en `media/productos/`) y la receta (`RECETAS`, tabla `DetallesMenu`) de un producto que no tenga. Render lo corre en cada build |
+| `cargar_catalogo` | `tienda` | Crea las categorías, productos e ingredientes que falten sin modificar los existentes. Las únicas excepciones: completa la imagen que falte o esté rota (`IMAGENES` e `IMAGENES_INGREDIENTES`; sube el archivo a S3 si no está) y la receta (`RECETAS`, tabla `DetallesMenu`) de un producto que no tenga. Render lo corre en cada build |
 | `crear_terminal <codigo>` | `iot` | Crea una terminal de kiosco (`build.sh` crea `caja-1`) |
 | `registrar_tarjeta <uid>` | `iot` | Agrega una tarjeta libre al inventario |
 | `simular_scan <uid> --terminal caja-1` | `iot` | Simula una lectura del ESP32, para probar sin hardware |
@@ -163,11 +163,11 @@ Hay diagramas de los ingredientes y del flujo del descuento en [diagramas.md](di
 
 ## 8. Tests
 
-165 tests con `unittest` de Django (`python manage.py test`), todos en verde:
+170 tests con `unittest` de Django (`python manage.py test`), todos en verde:
 
 | App | Clases |
 |---|---|
-| `tienda` (80) | `SumarUnMesTests`, `SuscripcionTests`, `IngredientesVisiblesTests`, `PrecioCupcakeTests`, `PedidoTests`, `CheckoutVistaTests`, `DireccionEntregaFormTests`, `DireccionCheckoutVistaTests`, `CheckoutPersonalizadosTests`, `CheckoutVIPTests`, `PaginasPublicasTests`, `CamposVIPTests`, `IngredientesExclusivosTests`, `ImagenesCatalogoTests`, `RecetasCatalogoTests`, `EncabezadoComunTests`, `ImagenFaltanteTests`, `DescuentoVIPTests`, `AplicarDescuentoTests`, `TiendaVIPTests`, `KioscoPlantillaTests`, `EntregaTarjetaMensajeTests` |
+| `tienda` (85) | `SumarUnMesTests`, `SuscripcionTests`, `IngredientesVisiblesTests`, `PrecioCupcakeTests`, `PedidoTests`, `CheckoutVistaTests`, `DireccionEntregaFormTests`, `DireccionCheckoutVistaTests`, `CheckoutPersonalizadosTests`, `CheckoutVIPTests`, `PaginasPublicasTests`, `CamposVIPTests`, `IngredientesExclusivosTests`, `ImagenesCatalogoTests`, `RecetasCatalogoTests`, `EncabezadoComunTests`, `ImagenFaltanteTests`, `DescuentoVIPTests`, `AplicarDescuentoTests`, `TiendaVIPTests`, `KioscoPlantillaTests`, `EntregaTarjetaMensajeTests` |
 | `usuarios` (44) | `RegistroTests`, `PerfilVIPTests`, `UsuariosDemoTests`, `CumpleaniosTests`, `DiasParaCumpleaniosTests`, `FechasVIPTests`, `CumpleaniosAPITests`, `VideoQRTests`, `PaginaVIPTests` |
 | `iot` (41) | `NormalizarUidTests`, `TarjetasLibresTests`, `ComandosIotTests`, `EntregaTarjetaTests`, `ScanAPITests`, `LoginTarjetaTests`, `KioscoTests`, `HealthzTests`, `SimularScanTests` |
 
@@ -179,7 +179,7 @@ Los números son los del análisis original, para poder rastrearlos en [historia
 
 **Producción y configuración**
 - **Integrar ramas:** `feat/direccion-entrega` y `feat/ajustes-ui` aún no se fusionan a `feat/render-allocation`.
-- **Imágenes del catálogo en S3:** `cargar_catalogo` apunta a `media/productos/*.jpg`. Mientras no estén en el bucket, la tienda muestra el logo en su lugar.
+- **Imágenes del catálogo:** se publican solas en el siguiente deploy (ver [despliegue-render.md](despliegue-render.md)). Falta la foto del ingrediente Base "Zanahoria"; `base_naranja.jpg` y `descarga_1`, `_2`, `_10` y `_11` no se usan.
 - **#15** No hay envío de correos: `MAILERS` usa el backend de consola (`check --deploy` avisa `mail.E001`). Lo necesitarían los recordatorios del calendario.
 - **#16** `SECURE_HSTS_SECONDS` vale `0` por defecto (aviso `security.W004`). Ya se configura por variable de entorno; falta subirlo.
 - **#17** El PostgreSQL gratuito de Render vence a los 30 días. Si se recrea, se pierden pedidos, cumpleaños y fechas (los usuarios demo se recrean en el build).
