@@ -104,7 +104,7 @@ INGREDIENTES = [
     ("Base", "Chocolate", "5.00"),
     ("Base", "Red velvet", "8.00"),
     ("Base", "Zanahoria", "6.00"),
-    # ("Base", "Naranja", "6.00"),  # descomenta y pon el precio real si la quieres
+    ("Base", "Naranja", "6.00"),
 
     ("Relleno", "Crema de vainilla", "0.00"),
     ("Relleno", "Chocolate", "5.00"),
@@ -126,7 +126,7 @@ IMAGENES_INGREDIENTES = {
     ("Base", "Vainilla"): "ingredientes/base_vainilla.jpg",
     ("Base", "Chocolate"): "ingredientes/base_chocolate.jpg",
     ("Base", "Red velvet"): "ingredientes/base_red_velvet.jpg",
-    # ("Base", "Naranja"): "ingredientes/base_naranja.jpg",
+    ("Base", "Naranja"): "ingredientes/base_naranja.jpg",
 
     ("Relleno", "Crema de vainilla"): "ingredientes/relleno_vainilla.jpg",
     ("Relleno", "Chocolate"): "ingredientes/relleno_chocolate.jpg",

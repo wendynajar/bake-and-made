@@ -147,6 +147,7 @@ Se revisó por qué las contraseñas de Ana, Bruno y Carla volvían a la origina
 | Merge de `main`: se tomaron sus imágenes, sus nombres de archivo e `IMAGENES_INGREDIENTES`; se conservaron las recetas, los exclusivos y los type hints de esta rama | 16 de las 17 imágenes locales eran idénticas a las de `main` con otro nombre. La única distinta es `cf1.jpg` |
 | "Cupcake de fresa" usa `cf1.jpg` y no `descarga_11.jpg` | `descarga_11.jpg` es una caja con galletas y brownies |
 | `cargar_catalogo` sube a S3 las imágenes que falten y corrige las rutas rotas; un error de S3 solo se avisa | Render no sirve `media/` con `DEBUG=False`: versionar el archivo no bastaba |
+| Se activó el ingrediente Base "Naranja" ($6.00, visible para todos) con `base_naranja.jpg` | En `main` estaba comentado a la espera de precio |
 | `USAR_S3` es falso al correr los tests | Con un `.env` con bucket, los tests subirían archivos al bucket real |
 
 ## 6. Hallazgos del análisis original y su estado

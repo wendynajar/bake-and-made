@@ -179,7 +179,7 @@ Los números son los del análisis original, para poder rastrearlos en [historia
 
 **Producción y configuración**
 - **Integrar ramas:** `feat/direccion-entrega` y `feat/ajustes-ui` aún no se fusionan a `feat/render-allocation`.
-- **Imágenes del catálogo:** se publican solas en el siguiente deploy (ver [despliegue-render.md](despliegue-render.md)). Falta la foto del ingrediente Base "Zanahoria"; `base_naranja.jpg` y `descarga_1`, `_2`, `_10` y `_11` no se usan.
+- **Imágenes del catálogo:** se publican solas en el siguiente deploy (ver [despliegue-render.md](despliegue-render.md)). Falta la foto del ingrediente Base "Zanahoria"; `descarga_1`, `_2`, `_10` y `_11` no se usan.
 - **#15** No hay envío de correos: `MAILERS` usa el backend de consola (`check --deploy` avisa `mail.E001`). Lo necesitarían los recordatorios del calendario.
 - **#16** `SECURE_HSTS_SECONDS` vale `0` por defecto (aviso `security.W004`). Ya se configura por variable de entorno; falta subirlo.
 - **#17** El PostgreSQL gratuito de Render vence a los 30 días. Si se recrea, se pierden pedidos, cumpleaños y fechas (los usuarios demo se recrean en el build).
