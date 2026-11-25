@@ -621,7 +621,7 @@ class IngredientesExclusivosTests(TestCase):
             ('Cobertura', 'Queso crema'),
             ('Topping', 'Fresas'),
         })
-        self.assertEqual(Ingrediente.objects.filter(solo_suscriptores=False).count(), 11)
+        self.assertEqual(Ingrediente.objects.filter(solo_suscriptores=False).count(), 12)
 
     def test_basic_no_ve_los_exclusivos_y_sweet_si(self) -> None:
         call_command('cargar_catalogo', stdout=StringIO())
