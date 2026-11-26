@@ -1,0 +1,11 @@
+# Dependencias de producción (Render instala con: pip install -r requirements.txt).
+# Mantener en sincronía con el Pipfile.
+Django==6.1.1
+pillow>=11.0
+gunicorn>=23.0
+whitenoise>=6.8
+dj-database-url>=2.3
+psycopg[binary]>=3.2
+python-dotenv>=1.0
+django-storages[s3]>=1.14
+segno>=1.6

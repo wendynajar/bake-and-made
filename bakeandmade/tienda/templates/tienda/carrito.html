@@ -20,57 +20,7 @@
 
 <body class="premium-site">
 
-    <div class="announcement">
-        <span>✦</span>
-        PEQUEÑOS DETALLES, GRANDES MOMENTOS
-        <span>✦</span>
-    </div>
-
-    <header class="premium-header">
-        <div class="header-inner">
-
-            <a class="brand" href="{% url 'inicio' %}">
-                Bake & Made
-                <small>ARTISAN PATISSERIE</small>
-            </a>
-
-            <button class="mobile-menu-toggle"
-                    type="button"
-                    aria-label="Abrir menú"
-                    aria-expanded="false"
-                    aria-controls="main-navigation">
-                ☰
-            </button>
-
-            <nav class="premium-nav" id="main-navigation">
-                <a href="{% url 'inicio' %}">Inicio</a>
-                <a href="{% url 'inicio' %}#productos">Colección</a>
-                <a href="{% url 'inicio' %}#nosotros">Nuestra historia</a>
-                <a href="{% url 'suscripcion' %}">Planes</a>
-                <a href="{% url 'ver_carrito' %}">Mi carrito</a>
-
-                {% if user.is_authenticated %}
-                    <span class="user-greeting">
-                        Hola, {{ user.first_name|default:user.username }}
-                    </span>
-                    {% if es_plan_sweet %}
-                        <span class="sweet-menu-badge">Sweet</span>
-                    {% endif %}
-                    <form method="POST" action="{% url 'logout' %}">
-                        {% csrf_token %}
-                        <button class="nav-account" type="submit">
-                            Salir
-                        </button>
-                    </form>
-                {% else %}
-                    <a class="nav-account" href="{% url 'login' %}">
-                        Mi cuenta
-                    </a>
-                {% endif %}
-            </nav>
-
-        </div>
-    </header>
+    {% include 'tienda/_encabezado.html' %}
 
     <main class="cart-page">
 
@@ -122,9 +72,11 @@
                                 {% if item.tipo == 'personalizado' %}
                                     <span>♡ Bake & Made</span>
                                 {% elif item.producto.imagen %}
+                                    <template><span>Bake & Made</span></template>
                                     <img
                                         src="{{ item.producto.imagen.url }}"
                                         alt="{{ item.producto.nombre_producto }}"
+                                        onerror="this.replaceWith(this.previousElementSibling.content.cloneNode(true))"
                                     >
                                 {% else %}
                                     <span>Bake & Made</span>
@@ -141,6 +93,7 @@
                                     <h3>{{ item.nombre }}</h3>
 
                                     <p class="cart-unit-price">
+                                        {% if vip_activo %}<del aria-label="Precio normal">${{ item.precio_base|floatformat:2 }}</del>{% endif %}
                                         ${{ item.precio_unitario|floatformat:2 }} MXN / unidad
                                     </p>
 
@@ -208,7 +161,8 @@
                                     <h3>{{ item.producto.nombre_producto }}</h3>
 
                                     <p class="cart-unit-price">
-                                        ${{ item.producto.precio_base|floatformat:2 }} MXN / unidad
+                                        {% if vip_activo %}<del aria-label="Precio normal">${{ item.precio_base|floatformat:2 }}</del>{% endif %}
+                                        ${{ item.precio_unitario|floatformat:2 }} MXN / unidad
                                     </p>
 
                                     <div class="cart-product-controls">
@@ -288,8 +242,18 @@
 
                     <div class="summary-row">
                         <span>Subtotal</span>
-                        <strong>${{ total }} MXN</strong>
+                        <strong>${{ subtotal|floatformat:2 }} MXN</strong>
                     </div>
+
+                    {% if vip_activo and ahorro > 0 %}
+                        <div class="summary-row summary-row-vip">
+                            <span>
+                                {% if vip_es_cumpleanios %}Cumpleaños{% else %}Descuento VIP{% endif %}
+                                −{{ vip_porcentaje }} %
+                            </span>
+                            <strong>−${{ ahorro|floatformat:2 }} MXN</strong>
+                        </div>
+                    {% endif %}
 
                     <div class="summary-row">
                         <span>Envío</span>
@@ -300,7 +264,7 @@
 
                     <div class="summary-total">
                         <span>Total de productos</span>
-                        <strong>${{ total }} MXN</strong>
+                        <strong>${{ total|floatformat:2 }} MXN</strong>
                     </div>
 
                     <p class="summary-note">
@@ -366,5 +330,6 @@
         </div>
     </footer>
 
+    {% include 'iot/_kiosco.html' %}
 </body>
 </html>

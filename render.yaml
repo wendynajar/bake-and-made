@@ -1,0 +1,53 @@
+# Blueprint de Render: Web Service (Django + gunicorn) + PostgreSQL.
+# Uso: Render → New → Blueprint → seleccionar este repositorio.
+databases:
+  - name: bakeandmade-db
+    databaseName: bakeandmade
+    user: bakeandmade
+    plan: free
+
+services:
+  - type: web
+    name: bakeandmade
+    runtime: python
+    plan: free
+    buildCommand: ./build.sh
+    startCommand: cd bakeandmade && gunicorn bakeandmade.wsgi:application --bind 0.0.0.0:$PORT
+    # Responde 200 sin tocar la BD; el ESP32 también lo llama cada 10 min.
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.5
+      - key: DEBUG
+        value: "False"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: WEB_CONCURRENCY
+        value: 2
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bakeandmade-db
+          property: connectionString
+      # Completar en el panel de Render (sync: false = no se guarda en el repo):
+      - key: AWS_STORAGE_BUCKET_NAME
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_S3_REGION_NAME
+        sync: false
+      - key: DJANGO_SUPERUSER_USERNAME
+        sync: false
+      - key: DJANGO_SUPERUSER_EMAIL
+        sync: false
+      - key: DJANGO_SUPERUSER_PASSWORD
+        sync: false
+      # Capa VIP/RFID. El token se genera aquí; cópialo al secrets.h del ESP32.
+      - key: IOT_DEVICE_TOKEN
+        generateValue: true
+      # Usuarios demo (build.sh corre crear_usuarios_demo si ambas existen).
+      - key: DEMO_PASSWORD
+        sync: false
+      - key: DEMO_VIP_UIDS
+        sync: false

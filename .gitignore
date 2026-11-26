@@ -378,3 +378,9 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+# Metadatos de Windows al copiar archivos a WSL
+*:Zone.Identifier
+
+# Firmware del ESP32 (PlatformIO): credenciales y artefactos de compilación
+firmware/esp32-vip/include/secrets.h
+firmware/esp32-vip/.pio/

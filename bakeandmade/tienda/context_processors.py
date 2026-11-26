@@ -1,28 +1,26 @@
-from .suscripciones import PRECIO_SWEET_PLAN, plan_actual
+"""Variables disponibles en todas las plantillas."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from django.http import HttpRequest
+
+from .carrito import contar_articulos
+from .models import PLAN_SWEET, PRECIO_SWEET_PLAN
+from .peticion import plan_de_peticion
 
 
-def contador_carrito(request):
-    carrito = request.session.get('carrito', {})
-    personalizados = request.session.get('carrito_personalizados', [])
+def contador_carrito(request: HttpRequest) -> dict[str, Any]:
+    """Contador del carrito y plan del usuario para la barra de navegación.
 
-    total_normales = sum(
-        cantidad
-        for cantidad in carrito.values()
-        if type(cantidad) is int and cantidad > 0
-    )
-
-    total_personalizados = sum(
-        cupcake.get('cantidad', 1)
-        for cupcake in personalizados
-        if type(cupcake.get('cantidad', 1)) is int
-        and cupcake.get('cantidad', 1) > 0
-    )
-
-    plan = plan_actual(request.user)
-
+    El plan se calcula una sola vez por petición (`tienda.peticion`), aunque
+    también lo usen el context processor VIP y las vistas.
+    """
+    plan = plan_de_peticion(request)
     return {
-        'contador_carrito': total_normales + total_personalizados,
+        'contador_carrito': contar_articulos(request),
         'plan_usuario': plan,
-        'es_plan_sweet': plan == 'sweet',
+        'es_plan_sweet': plan == PLAN_SWEET,
         'precio_sweet_plan': PRECIO_SWEET_PLAN,
     }

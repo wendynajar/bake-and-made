@@ -1,0 +1,158 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#fff9f6">
+    <title>VIP | Bake & Made</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Great+Vibes&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'tienda/estilos.css' %}">
+    <link rel="stylesheet" href="{% static 'tienda/premium.css' %}">
+    <link rel="stylesheet" href="{% static 'usuarios/vip.css' %}">
+    <script src="{% static 'tienda/premium.js' %}" defer></script>
+    <!-- FullCalendar 6 (vista mensual) y su traducción al español -->
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.15/locales/es.global.min.js" defer></script>
+    <script src="{% static 'usuarios/vip.js' %}" defer></script>
+</head>
+<body class="premium-site">
+    {% include 'tienda/_encabezado.html' %}
+
+    {% if messages %}
+        <div class="cart-messages" role="status">
+            {% for message in messages %}<p>{{ message }}</p>{% endfor %}
+        </div>
+    {% endif %}
+
+    <main class="vip-page"
+          id="vip"
+          data-url-fechas="{% url 'vip_fechas' %}"
+          data-url-cumpleanios="{% url 'vip_cumpleanios' %}"
+          data-csrf="{{ csrf_token }}">
+
+        <!-- Encabezado: vigencia y descuento de hoy -->
+        <section class="vip-hero">
+            <span class="section-kicker">MEMBRESÍA VIP</span>
+            <h1>{{ user.first_name|default:user.username }}</h1>
+
+            {% if vip_es_cumpleanios %}
+                <p class="vip-felicitacion">¡Feliz cumpleaños! Hoy tienes {{ vip_porcentaje }} % de descuento en toda la tienda.</p>
+            {% endif %}
+
+            <dl class="vip-resumen">
+                <div>
+                    <dt>Sweet Plan vigente hasta</dt>
+                    <dd>{{ suscripcion.fecha_fin|date:"j \d\e F \d\e Y" }}</dd>
+                </div>
+                <div>
+                    <dt>Tu descuento de hoy</dt>
+                    <dd>{{ vip_porcentaje }} %{% if vip_es_cumpleanios %} · Cumpleaños{% endif %}</dd>
+                </div>
+            </dl>
+        </section>
+
+        <div class="vip-grid">
+
+            <!-- Cumpleaños: se registra una sola vez -->
+            <section class="vip-card" aria-labelledby="titulo-cumple">
+                <h2 id="titulo-cumple">Tu cumpleaños</h2>
+                {% if perfil.fecha_nacimiento %}
+                    {% with mes=perfil.fecha_nacimiento|date:"F" %}
+                    <div class="vip-cumple">
+                        <span class="vip-cumple-dia">{{ perfil.fecha_nacimiento|date:"j" }}</span>
+                        {# --letras ajusta el tamaño del mes al ancho disponible (ver vip.css). #}
+                        <div class="vip-cumple-detalle" style="--letras: {{ mes|length }}">
+                            <span class="vip-cumple-mes">{{ mes }}</span>
+                        </div>
+                    </div>
+                    {% endwith %}
+                    <p class="vip-cumple-cuenta">
+                        {% if dias_cumple == 0 %}
+                            ¡Es hoy!
+                        {% elif dias_cumple == 1 %}
+                            Falta <strong>1</strong> día
+                        {% else %}
+                            Faltan <strong>{{ dias_cumple }}</strong> días
+                        {% endif %}
+                    </p>
+                    <p class="vip-nota">Para corregirla, pídelo en tienda.</p>
+                {% else %}
+                    <p>Regístralo y ese día tu descuento sube a 50 %.</p>
+                    <form id="form-cumple" class="vip-form" novalidate>
+                        <label for="fecha-cumple">Fecha de nacimiento</label>
+                        <input type="date" id="fecha-cumple" name="fecha" required
+                               max="{{ hoy|date:'Y-m-d' }}" min="1900-01-01">
+                        <button type="submit" class="vip-boton">Registrar</button>
+                        <p class="vip-error" id="error-cumple" role="alert" hidden></p>
+                    </form>
+                {% endif %}
+            </section>
+
+            <!-- Video del QR -->
+            <section class="vip-card vip-card-video" aria-labelledby="titulo-video">
+                <h2 id="titulo-video">Mi video</h2>
+                {% if experiencia %}
+                    {# El QR también es un enlace, para abrir el video desde este mismo dispositivo. #}
+                    <a class="vip-qr" href="{{ url_qr }}" aria-label="Código QR de tu video (abrir el video)">{{ qr_svg|safe }}</a>
+                    <p class="vip-nota">Escanéalo con tu celular para ver tu video.</p>
+                    {% if experiencia.mensaje_texto %}
+                        <blockquote class="vip-mensaje">{{ experiencia.mensaje_texto }}</blockquote>
+                    {% endif %}
+                {% else %}
+                    <p class="vip-nota">Tu video estará listo pronto.</p>
+                {% endif %}
+            </section>
+
+            <!-- Calendario de fechas especiales -->
+            <section class="vip-card vip-card-ancha" aria-labelledby="titulo-calendario">
+                <h2 id="titulo-calendario">Tus fechas especiales</h2>
+
+                <form id="form-fecha" class="vip-form vip-form-fila" novalidate>
+                    <div>
+                        <label for="nombre-evento">Nombre</label>
+                        <input type="text" id="nombre-evento" maxlength="100" required placeholder="Aniversario con Luis">
+                    </div>
+                    <div>
+                        <label for="fecha-evento">Fecha</label>
+                        <input type="date" id="fecha-evento" required>
+                    </div>
+                    <div>
+                        <label for="tipo-evento">Tipo</label>
+                        <select id="tipo-evento">
+                            {% for valor, etiqueta in tipos_fecha %}
+                                <option value="{{ valor }}"{% if valor == 'otro' %} selected{% endif %}>{{ etiqueta }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="vip-boton">Agregar</button>
+                    <p class="vip-error" id="error-fecha" role="alert" hidden></p>
+                </form>
+
+                <p class="vip-nota">Haz clic en una fecha tuya para borrarla. Cumpleaños y aniversarios se repiten cada año.</p>
+                <div id="calendario" class="vip-calendario"></div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Diálogo de confirmación propio (en lugar de alert/confirm) -->
+    <dialog id="dialogo" class="vip-dialogo" aria-labelledby="dialogo-texto">
+        <p id="dialogo-texto"></p>
+        <div class="vip-dialogo-acciones">
+            <button type="button" class="vip-boton vip-boton-secundario" data-respuesta="no">Cancelar</button>
+            <button type="button" class="vip-boton" data-respuesta="si" id="dialogo-confirmar">Sí, guardar</button>
+        </div>
+    </dialog>
+
+    <footer class="premium-footer">
+        <div class="footer-bottom">
+            <span>© 2026 Bake &amp; Made</span>
+            <span>MADE WITH LOVE ✦</span>
+        </div>
+    </footer>
+
+    {% include 'iot/_kiosco.html' %}
+</body>
+</html>

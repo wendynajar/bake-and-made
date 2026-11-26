@@ -127,12 +127,37 @@
     overflow-wrap: anywhere;
 }
 
+/* Dirección de entrega por campos (DireccionEntregaForm) */
+.checkout-direccion {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.checkout-direccion legend {
+    margin-bottom: 4px;
+    padding: 0;
+    color: #633b4a;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+.checkout-fila {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+}
+
+.checkout-field input,
 .checkout-field textarea {
     width: 100%;
     box-sizing: border-box;
-    padding: 18px 19px;
-    resize: vertical;
-    min-height: 145px;
     border: 1px solid #e8d9de;
     border-radius: 0;
     background: #fffdfc;
@@ -143,14 +168,35 @@
     transition: border-color 0.3s, box-shadow 0.3s;
 }
 
+.checkout-field input {
+    padding: 13px 17px;
+}
+
+.checkout-field textarea {
+    padding: 16px 19px;
+    resize: vertical;
+    min-height: 100px;
+}
+
+.checkout-field input::placeholder,
 .checkout-field textarea::placeholder {
     color: #b9a7ad;
 }
 
+.checkout-field input:focus,
 .checkout-field textarea:focus {
     outline: none;
     border-color: #c67c94;
     box-shadow: 0 0 0 3px rgba(198, 124, 148, 0.1);
+}
+
+.checkout-field-error input,
+.checkout-field-error textarea {
+    border-color: #c45d7e;
+}
+
+.checkout-field .checkout-error {
+    color: #b3415f;
 }
 
 .checkout-field small {
@@ -399,6 +445,10 @@
         padding: 30px 23px;
     }
 
+    .checkout-fila {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
     .checkout-summary {
         padding: 35px 23px;
     }
@@ -425,6 +475,7 @@
 @media (prefers-reduced-motion: reduce) {
     .checkout-submit,
     .checkout-back,
+    .checkout-field input,
     .checkout-field textarea {
         transition: none;
     }
